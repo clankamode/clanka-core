@@ -13,6 +13,7 @@ import { z } from 'zod';
 export const EventTypeSchema = z.enum([
   'run.started',
   'run.finished',
+  'run.commit',
   'agent.started',
   'agent.finished',
   'model.requested',

@@ -1,5 +1,5 @@
-#!/usr/bin/env ts-node
-import { verifyRun } from '../verify.js';
+#!/usr/bin/env node
+const { verifyRun } = require('../dist/verify.js');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -22,7 +22,7 @@ async function main() {
   try {
     const result = await verifyRun(runPath, { strict });
     console.log(`✅ Verified ${result.eventCount} events in ${runPath}`);
-  } catch (e: any) {
+  } catch (e) {
     console.error(`❌ Verification failed: ${e.message}`);
     process.exit(1);
   }
