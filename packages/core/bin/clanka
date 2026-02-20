@@ -1,0 +1,34 @@
+#!/usr/bin/env ts-node
+import { verifyRun } from '../verify.js';
+
+async function main() {
+  const args = process.argv.slice(2);
+  const subcommand = args[0];
+
+  if (subcommand !== 'verify') {
+    console.log('Usage: clanka verify --run <path> [--strict]');
+    process.exit(2);
+  }
+
+  const runIndex = args.indexOf('--run');
+  if (runIndex === -1 || !args[runIndex + 1]) {
+    console.error('Error: --run <path> is required');
+    process.exit(2);
+  }
+
+  const runPath = args[runIndex + 1];
+  const strict = args.includes('--strict');
+
+  try {
+    const result = await verifyRun(runPath, { strict });
+    console.log(`✅ Verified ${result.eventCount} events in ${runPath}`);
+  } catch (e: any) {
+    console.error(`❌ Verification failed: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+main().catch(e => {
+  console.error(e);
+  process.exit(1);
+});

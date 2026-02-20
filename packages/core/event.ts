@@ -29,22 +29,19 @@ export const EventTypeSchema = z.enum([
 export type EventType = z.infer<typeof EventTypeSchema>;
 
 export const EventSchema = z.object({
-  id: z.string().describe('UUID v4'),
+  v: z.number().describe('Schema version'),
+  id: z.string().describe('Digest ID'),
   runId: z.string().describe('Root run identifier'),
-  parentId: z.string().optional().describe('Causal parent (for causality chain)'),
+  seq: z.number().describe('Monotonic sequence'),
   type: EventTypeSchema,
   timestamp: z.number().describe('Unix ms'),
-  
-  // Payload: flexible, type-dependent
+  causes: z.array(z.string()).optional().describe('Causal links (parent IDs)'),
   payload: z.record(z.string(), z.any()),
-  
-  // Content hash for deterministic diffs
-  digest: z.string().describe('SHA256 of canonical JSON'),
-  
-  // Metadata
-  agent: z.string().optional(),
-  tool: z.string().optional(),
-  model: z.string().optional(),
+  meta: z.object({
+    agentId: z.string().optional(),
+    tool: z.string().optional(),
+    model: z.string().optional(),
+  }).optional(),
 });
 
 export type Event = z.infer<typeof EventSchema>;
@@ -67,30 +64,32 @@ export function contentDigest(obj: any): string {
 }
 
 /**
- * Create an event with auto-generated digest and ID.
+ * Create an event with auto-generated digest ID.
  */
 export function createEvent(
+  v: number,
   type: EventType,
   runId: string,
+  seq: number,
   payload: Record<string, any>,
-  parentId?: string
+  causes: string[] = []
 ): Event {
-  const id = crypto.randomUUID();
   const timestamp = Date.now();
   
-  const eventData = {
-    id,
+  const eventData: any = {
+    v,
     runId,
-    parentId,
+    seq,
     type,
     timestamp,
+    causes,
     payload,
   };
   
-  const digest = contentDigest(eventData);
+  const id = contentDigest(eventData);
   
   return {
     ...eventData,
-    digest,
+    id,
   };
 }
