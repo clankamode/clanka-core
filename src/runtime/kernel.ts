@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface CognitiveEvent {
   v: number;
@@ -21,6 +23,11 @@ export interface Invariant {
 export interface RuntimeState {
   history: CognitiveEvent[];
   invariants: Invariant[];
+}
+
+export interface VerifyResult {
+  valid: boolean;
+  eventCount: number;
 }
 
 export function toCanonical(obj: any): string {
@@ -84,5 +91,61 @@ export class ClankaKernel {
 
   public getHistory() {
     return [...this.state.history];
+  }
+
+  public loadHistory(history: CognitiveEvent[]) {
+    this.state.history = [...history];
+  }
+
+  public serialize(): string {
+    return this.state.history.map(event => JSON.stringify(event)).join('\n');
+  }
+
+  public verify(): VerifyResult {
+    const eventIds = new Set<string>();
+    const idToSeq = new Map<string, number>();
+
+    for (let expectedSeq = 0; expectedSeq < this.state.history.length; expectedSeq++) {
+      const event = this.state.history[expectedSeq];
+      const { id: actualId, ...eventWithoutId } = event;
+      const recomputedDigest = createHash('sha256').update(toCanonical(eventWithoutId)).digest('hex');
+
+      if (actualId !== recomputedDigest) {
+        throw new Error(`Event ${event.seq} has invalid digest. Expected: ${recomputedDigest}`);
+      }
+
+      if (event.seq !== expectedSeq) {
+        throw new Error(`Sequence gap. Expected ${expectedSeq}, got ${event.seq}`);
+      }
+
+      for (const causeId of event.causes || []) {
+        if (!eventIds.has(causeId)) {
+          throw new Error(`Event ${event.seq} has unknown cause: ${causeId}`);
+        }
+        const causeSeq = idToSeq.get(causeId) ?? -1;
+        if (causeSeq >= event.seq) {
+          throw new Error(`Event ${event.seq} has forward or self-referencing cause: ${causeId}`);
+        }
+      }
+
+      eventIds.add(event.id);
+      idToSeq.set(event.id, event.seq);
+    }
+
+    return { valid: true, eventCount: this.state.history.length };
+  }
+
+  public static fromJSONL(runId: string, jsonl: string): ClankaKernel {
+    const kernel = new ClankaKernel(runId);
+    const lines = jsonl.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const history = lines.map(line => JSON.parse(line) as CognitiveEvent);
+    kernel.loadHistory(history);
+    return kernel;
+  }
+
+  public static loadFromFile(runId: string, runsDir = 'runs'): ClankaKernel {
+    const runPath = path.join(runsDir, `${runId}.jsonl`);
+    const content = fs.readFileSync(runPath, 'utf-8');
+    return ClankaKernel.fromJSONL(runId, content);
   }
 }
