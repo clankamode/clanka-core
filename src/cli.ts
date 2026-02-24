@@ -3,6 +3,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ClankaKernel } from './runtime/kernel.js';
+import { diffRuns, formatDiffMarkdown } from './diff.js';
 
 const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 
@@ -14,6 +15,7 @@ function usage() {
   console.log('  verify <runId>');
   console.log('  ls');
   console.log('  export <runId>');
+  console.log('  diff <runId1> <runId2> [--json]');
 }
 
 function runPath(runId: string): string {
@@ -100,6 +102,17 @@ function cmdLs() {
   }
 }
 
+function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
+  const kernel1 = loadRun(runId1);
+  const kernel2 = loadRun(runId2);
+  const result = diffRuns(runId1, kernel1.getHistory(), runId2, kernel2.getHistory());
+  if (jsonOutput) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(formatDiffMarkdown(result));
+  }
+}
+
 function cmdExport(runId: string) {
   const filePath = runPath(runId);
   if (!fs.existsSync(filePath)) {
@@ -148,6 +161,15 @@ async function main() {
     const runId = args[0];
     if (!runId) throw new Error('export requires <runId>');
     cmdExport(runId);
+    return;
+  }
+
+  if (command === 'diff') {
+    const positional = args.filter(a => !a.startsWith('--'));
+    const jsonOutput = args.includes('--json');
+    const [runId1, runId2] = positional;
+    if (!runId1 || !runId2) throw new Error('diff requires <runId1> <runId2>');
+    cmdDiff(runId1, runId2, jsonOutput);
     return;
   }
 
