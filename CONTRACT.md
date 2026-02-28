@@ -1,47 +1,146 @@
-# DAR v1.1 Contract
+# Runtime Event Contract (`src/runtime`)
 
-This document defines the deterministic execution guarantees and data integrity protocol for the Clanka Deterministic Agent Runtime (DAR).
+This contract is derived from the code in `src/runtime/kernel.ts`, `src/runtime/kernel.test.ts`, and `src/runtime/kernel.vitest.test.ts`.
 
-## 1. The Core Guarantee
+## 1. Event Envelope Schema
 
-### What is Proven
-- **Immutability**: Every cognitive event is part of an append-only, content-addressed log.
-- **Causality**: Events are explicitly linked via `causes[]`. Forward-referencing or cyclic causality is prohibited.
-- **Integrity**: Every event's `id` is a cryptographic digest of its contents. Any tampering with payloads, timestamps, or sequences invalidates the chain.
-- **FS Replayability**: File mutations are recorded as atomic `fs.diff` operations. A verifier starting from an empty state must arrive at the same `workspaceHash` by replaying the log.
+`ClankaKernel.log(type, agentId, payload, causes)` emits this envelope:
 
-### What is Not Promised
-- **LLM Output Determinism**: We do not guarantee the same model will produce the same text. We guarantee that *what the model produced* is recorded accurately and cannot be altered after the fact.
-- **Temporal Alignment**: While timestamps are recorded, DAR ensures sequence integrity, not wall-clock precision.
+| Field | Required | Type | Notes |
+| --- | --- | --- | --- |
+| `v` | yes | `number` | Runtime currently emits `1.1`. |
+| `id` | yes | `string` | SHA-256 digest (hex) of canonical event JSON excluding `id`. |
+| `runId` | yes | `string` | Run/session identifier from kernel constructor. |
+| `seq` | yes | `number` | Monotonic, zero-based index in append order. |
+| `type` | yes | `string` | No enum validation in `src/runtime`; any string is accepted. |
+| `timestamp` | yes | `number` | Unix epoch milliseconds from `Date.now()`. |
+| `causes` | yes (on emitted events) | `string[]` | Causal parent event IDs; defaults to `[]`. |
+| `payload` | yes | `any` | Unvalidated payload value. |
+| `meta` | optional | `{ agentId?: string }` | Runtime logger sets `meta.agentId` from `agentId` argument. |
 
-## 2. Identity & Canonicalization
+## 2. Runtime Integrity Rules (`verify()`)
 
-### Digest Identity Rule
-The `id` of an event must be the SHA256 hex digest of its canonical JSON representation **excluding the `id` field itself**.
+`verify()` enforces:
 
-### Canonicalization Rules
-1.  **Key Sorting**: All object keys must be sorted lexicographically.
-2.  **No Whitespace**: The JSON must be serialized with zero indentation or extra spaces.
-3.  **UTF-8**: Encoding must be strict UTF-8.
+1. `id` must match the recomputed digest of event content.
+2. `seq` must be contiguous (`0..N-1`) with no gaps.
+3. Every `cause` must reference a prior event ID in the same history.
+4. Forward/self references in `causes` are invalid.
 
-## 3. Log Policy (v1.1)
+## 3. Event Types Found In `src/runtime`
 
-- **Schema**: Version 1.1 strictly requires `v`, `seq`, `runId`, `type`, `timestamp`, `payload`, and `causes`.
-- **Monotonicity**: `seq` must start at `0` and increment by exactly `1` per event.
-- **Causal DAG**: Every `causeId` in `causes[]` must refer to a previous event in the same log.
+The runtime has an open string `type`, but these are all event types used in `src/runtime/*`.
 
-## 4. Threat Model
+### `run.start`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`, `msg`, `input`, `key`, `prompt`, `run`, `data`, `secret`.
+- Example payload:
+```json
+{}
+```
 
-- **Boundary**: The DAR verifier acts as a trusted auditor.
-- **Tamper Evidence**: Any modification to a `.jsonl` trace by an external process (or a rogue agent attempting to "gaslight" history) is detectable via digest mismatch or sequence gaps.
-- **Strict Mode**: In strict mode, a log is only valid if it terminates with a `run.commit` event containing a valid rolling hash of the entire sequence.
+### `run.end`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`, `msg`, `result`, `output`, `status`, `run`.
+- Example payload:
+```json
+{ "status": "ok" }
+```
 
-## 5. Sample Trace (5-event JSONL)
+### `tool.call`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `tool`, `cmd`.
+- Example payload:
+```json
+{ "tool": "bash", "cmd": "ls -la" }
+```
+
+### `agent.think`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`.
+- Example payload:
+```json
+{ "step": 1 }
+```
+
+### `agent.step`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `run`, `i`.
+- Example payload:
+```json
+{ "run": "A", "i": 0 }
+```
+
+### `run.middle`
+- Required payload fields: none.
+- Optional payload fields seen in tests: none.
+- Example payload:
+```json
+{}
+```
+
+### `step.one`
+- Required payload fields: none.
+- Optional payload fields seen in tests: none.
+- Example payload:
+```json
+{}
+```
+
+### `test.event`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `data`.
+- Example payload:
+```json
+{ "data": "value" }
+```
+
+### `invariant.failed`
+- Emitted internally by `ClankaKernel.enforceInvariants()` when an invariant check returns `valid: false`.
+- Required payload fields: `invariant` (`string`), `message` (`string`).
+- Optional payload fields: `severity` (any).
+- Special envelope behavior:
+1. `meta.agentId` is set to `"kernel"`.
+2. `causes` contains the triggering event ID.
+- Example payload:
+```json
+{
+  "invariant": "no-forward-causes",
+  "message": "Cause points to future event",
+  "severity": "error"
+}
+```
+
+### `run.started` (validation fixture in tests)
+- Used only in `kernel.vitest.test.ts` to test external `EventSchema` parsing behavior.
+- Runtime itself does not reserve this string; it is accepted as any other string type.
+- Required payload fields in runtime: none.
+- Example payload:
+```json
+{}
+```
+
+### `runtime.unknown` (invalid-schema fixture in tests)
+- Used only in `kernel.vitest.test.ts` as an intentionally invalid enum value for external `EventSchema` tests.
+- Runtime itself still accepts it because `src/runtime` does not enforce a `type` enum.
+- Required payload fields in runtime: none.
+- Example payload:
+```json
+{}
+```
+
+## 4. Canonical Event Example
 
 ```json
-{"v":1.1,"runId":"test-123","seq":0,"type":"run.started","timestamp":1708383200000,"payload":{},"causes":[],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":1,"type":"decision.made","timestamp":1708383201000,"payload":{"thought":"Check directory"},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":2,"type":"tool.requested","timestamp":1708383202000,"payload":{"tool":"ls"},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":3,"type":"tool.responded","timestamp":1708383203000,"payload":{"files":["src/"]},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":4,"type":"run.finished","timestamp":1708383204000,"payload":{"status":"success"},"causes":[...],"id":"..."}
+{
+  "v": 1.1,
+  "id": "3e8d3f2f5c8f3df2a3bc6f0ef94ac7e9f9f2d67db1c41d6f8cbca7c5f021a111",
+  "runId": "run-123",
+  "seq": 0,
+  "type": "run.start",
+  "timestamp": 1767225600000,
+  "causes": [],
+  "payload": {},
+  "meta": { "agentId": "cli" }
+}
 ```
