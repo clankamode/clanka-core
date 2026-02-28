@@ -1,337 +1,146 @@
-# Clanka Event Contract (DAR v1.1)
+# Runtime Event Contract (`src/runtime`)
 
-This document describes the event envelope and event-type payload contracts in this repository.
+This contract is derived from the code in `src/runtime/kernel.ts`, `src/runtime/kernel.test.ts`, and `src/runtime/kernel.vitest.test.ts`.
 
-Source of truth used to build this contract:
-- `packages/core/event.ts` (`EventTypeSchema`, base `EventSchema`)
-- `packages/core/types.ts` (strict payload schemas for several event types)
-- `src/runtime/kernel.ts` and `src/cli.ts` (runtime behavior + legacy event names)
+## 1. Event Envelope Schema
 
-## Base event envelope
+`ClankaKernel.log(type, agentId, payload, causes)` emits this envelope:
 
-Required fields for every event:
-- `v`: number
-- `id`: string (SHA-256 digest over canonical event bytes, excluding `id`)
-- `runId`: string
-- `seq`: number (contiguous, starts at `0`)
-- `type`: string
-- `timestamp`: number (Unix ms)
-- `payload`: object
+| Field | Required | Type | Notes |
+| --- | --- | --- | --- |
+| `v` | yes | `number` | Runtime currently emits `1.1`. |
+| `id` | yes | `string` | SHA-256 digest (hex) of canonical event JSON excluding `id`. |
+| `runId` | yes | `string` | Run/session identifier from kernel constructor. |
+| `seq` | yes | `number` | Monotonic, zero-based index in append order. |
+| `type` | yes | `string` | No enum validation in `src/runtime`; any string is accepted. |
+| `timestamp` | yes | `number` | Unix epoch milliseconds from `Date.now()`. |
+| `causes` | yes (on emitted events) | `string[]` | Causal parent event IDs; defaults to `[]`. |
+| `payload` | yes | `any` | Unvalidated payload value. |
+| `meta` | optional | `{ agentId?: string }` | Runtime logger sets `meta.agentId` from `agentId` argument. |
 
-Optional fields:
-- `causes`: string[] (causal parent event IDs)
-- `meta`: object
-- `meta.agentId`: string
-- `meta.tool`: string
-- `meta.model`: string
+## 2. Runtime Integrity Rules (`verify()`)
 
-## Event types found in source
+`verify()` enforces:
 
-Canonical event types from `packages/core/event.ts`:
-- `run.started`
-- `run.finished`
-- `run.commit`
-- `agent.started`
-- `agent.finished`
-- `model.requested`
-- `model.responded`
-- `tool.requested`
-- `tool.responded`
-- `fs.snapshot`
-- `fs.diff`
-- `decision.made`
-- `invariant.failed`
-- `budget.exhausted`
+1. `id` must match the recomputed digest of event content.
+2. `seq` must be contiguous (`0..N-1`) with no gaps.
+3. Every `cause` must reference a prior event ID in the same history.
+4. Forward/self references in `causes` are invalid.
 
-Additional type defined in `packages/core/types.ts`:
-- `error.raised`
+## 3. Event Types Found In `src/runtime`
 
-Legacy runtime type emitted by `src/cli.ts`:
-- `run.start`
+The runtime has an open string `type`, but these are all event types used in `src/runtime/*`.
 
-## Payload contract by event type
-
-### `run.started`
-Required payload fields:
-- `name`: string
-- `version`: string
-
-Optional payload fields:
-- none
-
-Example payload:
-```json
-{
-  "name": "agent-workflow",
-  "version": "1.0.0"
-}
-```
-
-### `run.finished`
-Required payload fields:
-- `status`: `"success" | "failed" | "killed"`
-
-Optional payload fields:
-- `commitHash`: string
-
-Example payload:
-```json
-{
-  "status": "success",
-  "commitHash": "e3b0c44298fc1c149afbf4c8996fb924..."
-}
-```
-
-### `run.commit`
-Required payload fields:
-- none
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `run.start`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`, `msg`, `input`, `key`, `prompt`, `run`, `data`, `secret`.
+- Example payload:
 ```json
 {}
 ```
 
-### `agent.started`
-Required payload fields:
-- none
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `run.end`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`, `msg`, `result`, `output`, `status`, `run`.
+- Example payload:
 ```json
-{
-  "agentId": "planner-v1"
-}
+{ "status": "ok" }
 ```
 
-### `agent.finished`
-Required payload fields:
-- none
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `tool.call`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `tool`, `cmd`.
+- Example payload:
 ```json
-{
-  "status": "ok"
-}
+{ "tool": "bash", "cmd": "ls -la" }
 ```
 
-### `model.requested`
-Required payload fields:
-- none (no strict per-type payload schema in current source)
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `agent.think`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `step`.
+- Example payload:
 ```json
-{
-  "prompt": "Summarize the latest diff",
-  "model": "gpt-4"
-}
+{ "step": 1 }
 ```
 
-### `model.responded`
-Required payload fields:
-- none (no strict per-type payload schema in current source)
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `agent.step`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `run`, `i`.
+- Example payload:
 ```json
-{
-  "response": {
-    "text": "Plan generated."
-  }
-}
+{ "run": "A", "i": 0 }
 ```
 
-### `tool.requested`
-Required payload fields:
-- `callId`: string
-- `txId`: string
-- `tool`: string
-- `args`: object
-
-Optional payload fields:
-- `caps`: object
-- `caps.fsRead`: boolean
-- `caps.fsWrite`: boolean
-- `caps.net`: boolean
-
-Example payload:
+### `run.middle`
+- Required payload fields: none.
+- Optional payload fields seen in tests: none.
+- Example payload:
 ```json
-{
-  "callId": "tool-01",
-  "txId": "tx-01",
-  "tool": "bash",
-  "args": { "cmd": "ls -la" },
-  "caps": { "fsRead": true, "fsWrite": false }
-}
+{}
 ```
 
-### `tool.responded`
-Required payload fields:
-- `callId`: string
-- `txId`: string
-- `output`: any
-
-Optional payload fields:
-- `error`: object
-- `error.code`: string
-- `error.message`: string
-- `exitCode`: number
-
-Example payload:
+### `step.one`
+- Required payload fields: none.
+- Optional payload fields seen in tests: none.
+- Example payload:
 ```json
-{
-  "callId": "tool-01",
-  "txId": "tx-01",
-  "output": "file listing...",
-  "exitCode": 0
-}
+{}
 ```
 
-### `fs.snapshot`
-Required payload fields:
-- `workspaceHash`: string
-- `files`: array of objects
-- `files[].path`: string
-- `files[].digest`: string
-- `files[].size`: number
-
-Optional payload fields:
-- `txId`: string
-
-Example payload:
+### `test.event`
+- Required payload fields: none.
+- Optional payload fields seen in tests: `data`.
+- Example payload:
 ```json
-{
-  "workspaceHash": "sha256:...",
-  "txId": "tx-01",
-  "files": [
-    { "path": "src/main.ts", "digest": "abc123", "size": 1024 }
-  ]
-}
-```
-
-### `fs.diff`
-Required payload fields:
-- `txId`: string
-- `path`: string
-- `beforeDigest`: string
-- `afterDigest`: string
-- `patch`: object, one of:
-  - `{ "kind": "unified", "text": string }`
-  - `{ "kind": "blob", "digest": string }`
-
-Optional payload fields:
-- none
-
-Example payload:
-```json
-{
-  "txId": "tx-01",
-  "path": "src/main.ts",
-  "beforeDigest": "0a1b2c",
-  "afterDigest": "1c2d3e",
-  "patch": { "kind": "unified", "text": "@@ -1,1 +1,1 @@\\n-old\\n+new" }
-}
-```
-
-### `decision.made`
-Required payload fields:
-- `rationale`: string
-- `plan`: string[]
-
-Optional payload fields:
-- none
-
-Example payload:
-```json
-{
-  "rationale": "Need to inspect project files before edits",
-  "plan": ["ls", "cat package.json", "review output"]
-}
+{ "data": "value" }
 ```
 
 ### `invariant.failed`
-Required payload fields:
-- `invariant`: string
-- `message`: string
-- `severity`: `"warn" | "error" | "fatal"`
-
-Optional payload fields:
-- none
-
-Example payload:
+- Emitted internally by `ClankaKernel.enforceInvariants()` when an invariant check returns `valid: false`.
+- Required payload fields: `invariant` (`string`), `message` (`string`).
+- Optional payload fields: `severity` (any).
+- Special envelope behavior:
+1. `meta.agentId` is set to `"kernel"`.
+2. `causes` contains the triggering event ID.
+- Example payload:
 ```json
 {
-  "invariant": "plan_before_action",
-  "message": "tool.requested must be caused by decision.made",
+  "invariant": "no-forward-causes",
+  "message": "Cause points to future event",
   "severity": "error"
 }
 ```
 
-### `budget.exhausted`
-Required payload fields:
-- none
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
-```json
-{
-  "limit": 32000,
-  "used": 32000,
-  "remaining": 0
-}
-```
-
-### `error.raised`
-Required payload fields:
-- `code`: string
-- `message`: string
-
-Optional payload fields:
-- none
-
-Example payload:
-```json
-{
-  "code": "E_TOOL_TIMEOUT",
-  "message": "Tool execution exceeded timeout"
-}
-```
-
-### `run.start` (legacy runtime type)
-Required payload fields:
-- none
-
-Optional payload fields:
-- implementation-defined fields (object)
-
-Example payload:
+### `run.started` (validation fixture in tests)
+- Used only in `kernel.vitest.test.ts` to test external `EventSchema` parsing behavior.
+- Runtime itself does not reserve this string; it is accepted as any other string type.
+- Required payload fields in runtime: none.
+- Example payload:
 ```json
 {}
 ```
 
-## Replay and verification invariants
+### `runtime.unknown` (invalid-schema fixture in tests)
+- Used only in `kernel.vitest.test.ts` as an intentionally invalid enum value for external `EventSchema` tests.
+- Runtime itself still accepts it because `src/runtime` does not enforce a `type` enum.
+- Required payload fields in runtime: none.
+- Example payload:
+```json
+{}
+```
 
-- `seq` must be contiguous (`event[i].seq === i`).
-- `id` must equal `sha256(canonical(event_without_id))`.
-- each `causes[]` entry must reference an earlier event in the same run.
-- replayed JSONL must load and verify without mutation.
+## 4. Canonical Event Example
 
-## Compatibility notes
-
-- `src/runtime/kernel.ts` accepts arbitrary event type strings and does not enforce per-type payload schemas.
-- `packages/core/verify.ts` validates using `packages/core/event.ts` `EventSchema`; this currently accepts canonical event types above, but not `run.start` or `error.raised`.
-- `packages/core/types.ts` is stricter for per-type payloads and includes `error.raised`.
+```json
+{
+  "v": 1.1,
+  "id": "3e8d3f2f5c8f3df2a3bc6f0ef94ac7e9f9f2d67db1c41d6f8cbca7c5f021a111",
+  "runId": "run-123",
+  "seq": 0,
+  "type": "run.start",
+  "timestamp": 1767225600000,
+  "causes": [],
+  "payload": {},
+  "meta": { "agentId": "cli" }
+}
+```
