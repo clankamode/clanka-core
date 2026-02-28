@@ -20,6 +20,29 @@ describe('runtime event ordering invariants', () => {
     expect(kernel.verify()).toEqual({ valid: true, eventCount: 3 });
   });
 
+  it('preserves insertion order in history under sequential writes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
+
+    const kernel = new ClankaKernel('run-order-preserve');
+    const inserted: string[] = [];
+
+    for (const [type, step] of [
+      ['run.start', 0],
+      ['agent.think', 1],
+      ['tool.call', 2],
+      ['run.end', 3],
+    ] as const) {
+      const e = await kernel.log(type, 'agent', { step });
+      inserted.push(e.id);
+    }
+
+    const history = kernel.getHistory();
+    expect(history.map(e => e.id)).toEqual(inserted);
+    expect(history.map(e => e.payload.step)).toEqual([0, 1, 2, 3]);
+    expect(history.map(e => e.seq)).toEqual([0, 1, 2, 3]);
+  });
+
   it('rejects forward/self causal references during verify', async () => {
     const kernel = new ClankaKernel('run-ordering-invalid-cause');
     await kernel.log('run.start', 'agent', {});
@@ -63,6 +86,24 @@ describe('runtime replay determinism', () => {
     expect(replayed.getHistory()).toEqual(original.getHistory());
     expect(replayed.verify()).toEqual({ valid: true, eventCount: 2 });
   });
+
+  it('replaying the same serialized events produces the same state', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
+
+    const original = new ClankaKernel('run-deterministic-replay');
+    await original.log('run.start', 'agent', { prompt: 'hello' });
+    await original.log('tool.call', 'agent', { tool: 'bash', cmd: 'echo hi' });
+    await original.log('run.end', 'agent', { status: 'ok' });
+
+    const jsonl = original.serialize();
+    const replayA = ClankaKernel.fromJSONL('run-deterministic-replay', jsonl);
+    const replayB = ClankaKernel.fromJSONL('run-deterministic-replay', jsonl);
+
+    expect(replayA.getHistory()).toEqual(replayB.getHistory());
+    expect(replayA.serialize()).toBe(replayB.serialize());
+    expect(replayA.verify()).toEqual(replayB.verify());
+  });
 });
 
 describe('invalid event payloads (zod rejection)', () => {
@@ -91,6 +132,22 @@ describe('invalid event payloads (zod rejection)', () => {
       type: 'runtime.unknown',
       timestamp: 1700000000000,
       causes: [],
+      payload: {},
+    };
+
+    const parsed = EventSchema.safeParse(invalid);
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects malformed required fields via EventSchema', () => {
+    const invalid = {
+      v: '1.1',
+      id: 123,
+      runId: 'run-zod',
+      seq: 'zero',
+      type: 'run.started',
+      timestamp: '1700000000000',
+      causes: [42],
       payload: {},
     };
 
@@ -129,5 +186,36 @@ describe('concurrent run isolation', () => {
     expect(betaHistory.map(e => e.seq)).toEqual([0, 1, 2]);
     expect(new Set(alphaHistory.map(e => e.id)).size).toBe(3);
     expect(new Set(betaHistory.map(e => e.id)).size).toBe(3);
+  });
+
+  it('does not leak events between run histories under interleaved concurrency', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
+
+    const runA = new ClankaKernel('run-A');
+    const runB = new ClankaKernel('run-B');
+
+    await Promise.all([
+      (async () => {
+        for (let i = 0; i < 5; i++) {
+          await runA.log('agent.step', 'agent-a', { i, run: 'A' });
+        }
+      })(),
+      (async () => {
+        for (let i = 0; i < 5; i++) {
+          await runB.log('agent.step', 'agent-b', { i, run: 'B' });
+        }
+      })(),
+    ]);
+
+    const historyA = runA.getHistory();
+    const historyB = runB.getHistory();
+
+    expect(historyA).toHaveLength(5);
+    expect(historyB).toHaveLength(5);
+    expect(historyA.every(e => e.runId === 'run-A')).toBe(true);
+    expect(historyB.every(e => e.runId === 'run-B')).toBe(true);
+    expect(historyA.map(e => e.seq)).toEqual([0, 1, 2, 3, 4]);
+    expect(historyB.map(e => e.seq)).toEqual([0, 1, 2, 3, 4]);
   });
 });
