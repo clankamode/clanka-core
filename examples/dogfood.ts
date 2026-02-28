@@ -1,5 +1,5 @@
-import { ClankaKernel } from './src/runtime/kernel.js';
-import { ClankaRecorder } from './packages/core/recorder.js';
+import { ClankaKernel } from '../src/runtime/kernel.js';
+import { ClankaRecorder } from '../packages/core/recorder.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

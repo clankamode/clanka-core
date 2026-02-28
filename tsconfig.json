@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "packages/**/*", "dogfood-simple.ts"]
+  "include": ["src/**/*", "packages/**/*", "examples/dogfood-simple.ts"]
 }
