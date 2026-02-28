@@ -1,47 +1,337 @@
-# DAR v1.1 Contract
+# Clanka Event Contract (DAR v1.1)
 
-This document defines the deterministic execution guarantees and data integrity protocol for the Clanka Deterministic Agent Runtime (DAR).
+This document describes the event envelope and event-type payload contracts in this repository.
 
-## 1. The Core Guarantee
+Source of truth used to build this contract:
+- `packages/core/event.ts` (`EventTypeSchema`, base `EventSchema`)
+- `packages/core/types.ts` (strict payload schemas for several event types)
+- `src/runtime/kernel.ts` and `src/cli.ts` (runtime behavior + legacy event names)
 
-### What is Proven
-- **Immutability**: Every cognitive event is part of an append-only, content-addressed log.
-- **Causality**: Events are explicitly linked via `causes[]`. Forward-referencing or cyclic causality is prohibited.
-- **Integrity**: Every event's `id` is a cryptographic digest of its contents. Any tampering with payloads, timestamps, or sequences invalidates the chain.
-- **FS Replayability**: File mutations are recorded as atomic `fs.diff` operations. A verifier starting from an empty state must arrive at the same `workspaceHash` by replaying the log.
+## Base event envelope
 
-### What is Not Promised
-- **LLM Output Determinism**: We do not guarantee the same model will produce the same text. We guarantee that *what the model produced* is recorded accurately and cannot be altered after the fact.
-- **Temporal Alignment**: While timestamps are recorded, DAR ensures sequence integrity, not wall-clock precision.
+Required fields for every event:
+- `v`: number
+- `id`: string (SHA-256 digest over canonical event bytes, excluding `id`)
+- `runId`: string
+- `seq`: number (contiguous, starts at `0`)
+- `type`: string
+- `timestamp`: number (Unix ms)
+- `payload`: object
 
-## 2. Identity & Canonicalization
+Optional fields:
+- `causes`: string[] (causal parent event IDs)
+- `meta`: object
+- `meta.agentId`: string
+- `meta.tool`: string
+- `meta.model`: string
 
-### Digest Identity Rule
-The `id` of an event must be the SHA256 hex digest of its canonical JSON representation **excluding the `id` field itself**.
+## Event types found in source
 
-### Canonicalization Rules
-1.  **Key Sorting**: All object keys must be sorted lexicographically.
-2.  **No Whitespace**: The JSON must be serialized with zero indentation or extra spaces.
-3.  **UTF-8**: Encoding must be strict UTF-8.
+Canonical event types from `packages/core/event.ts`:
+- `run.started`
+- `run.finished`
+- `run.commit`
+- `agent.started`
+- `agent.finished`
+- `model.requested`
+- `model.responded`
+- `tool.requested`
+- `tool.responded`
+- `fs.snapshot`
+- `fs.diff`
+- `decision.made`
+- `invariant.failed`
+- `budget.exhausted`
 
-## 3. Log Policy (v1.1)
+Additional type defined in `packages/core/types.ts`:
+- `error.raised`
 
-- **Schema**: Version 1.1 strictly requires `v`, `seq`, `runId`, `type`, `timestamp`, `payload`, and `causes`.
-- **Monotonicity**: `seq` must start at `0` and increment by exactly `1` per event.
-- **Causal DAG**: Every `causeId` in `causes[]` must refer to a previous event in the same log.
+Legacy runtime type emitted by `src/cli.ts`:
+- `run.start`
 
-## 4. Threat Model
+## Payload contract by event type
 
-- **Boundary**: The DAR verifier acts as a trusted auditor.
-- **Tamper Evidence**: Any modification to a `.jsonl` trace by an external process (or a rogue agent attempting to "gaslight" history) is detectable via digest mismatch or sequence gaps.
-- **Strict Mode**: In strict mode, a log is only valid if it terminates with a `run.commit` event containing a valid rolling hash of the entire sequence.
+### `run.started`
+Required payload fields:
+- `name`: string
+- `version`: string
 
-## 5. Sample Trace (5-event JSONL)
+Optional payload fields:
+- none
 
+Example payload:
 ```json
-{"v":1.1,"runId":"test-123","seq":0,"type":"run.started","timestamp":1708383200000,"payload":{},"causes":[],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":1,"type":"decision.made","timestamp":1708383201000,"payload":{"thought":"Check directory"},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":2,"type":"tool.requested","timestamp":1708383202000,"payload":{"tool":"ls"},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":3,"type":"tool.responded","timestamp":1708383203000,"payload":{"files":["src/"]},"causes":[...],"id":"..."}
-{"v":1.1,"runId":"test-123","seq":4,"type":"run.finished","timestamp":1708383204000,"payload":{"status":"success"},"causes":[...],"id":"..."}
+{
+  "name": "agent-workflow",
+  "version": "1.0.0"
+}
 ```
+
+### `run.finished`
+Required payload fields:
+- `status`: `"success" | "failed" | "killed"`
+
+Optional payload fields:
+- `commitHash`: string
+
+Example payload:
+```json
+{
+  "status": "success",
+  "commitHash": "e3b0c44298fc1c149afbf4c8996fb924..."
+}
+```
+
+### `run.commit`
+Required payload fields:
+- none
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{}
+```
+
+### `agent.started`
+Required payload fields:
+- none
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{
+  "agentId": "planner-v1"
+}
+```
+
+### `agent.finished`
+Required payload fields:
+- none
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{
+  "status": "ok"
+}
+```
+
+### `model.requested`
+Required payload fields:
+- none (no strict per-type payload schema in current source)
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{
+  "prompt": "Summarize the latest diff",
+  "model": "gpt-4"
+}
+```
+
+### `model.responded`
+Required payload fields:
+- none (no strict per-type payload schema in current source)
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{
+  "response": {
+    "text": "Plan generated."
+  }
+}
+```
+
+### `tool.requested`
+Required payload fields:
+- `callId`: string
+- `txId`: string
+- `tool`: string
+- `args`: object
+
+Optional payload fields:
+- `caps`: object
+- `caps.fsRead`: boolean
+- `caps.fsWrite`: boolean
+- `caps.net`: boolean
+
+Example payload:
+```json
+{
+  "callId": "tool-01",
+  "txId": "tx-01",
+  "tool": "bash",
+  "args": { "cmd": "ls -la" },
+  "caps": { "fsRead": true, "fsWrite": false }
+}
+```
+
+### `tool.responded`
+Required payload fields:
+- `callId`: string
+- `txId`: string
+- `output`: any
+
+Optional payload fields:
+- `error`: object
+- `error.code`: string
+- `error.message`: string
+- `exitCode`: number
+
+Example payload:
+```json
+{
+  "callId": "tool-01",
+  "txId": "tx-01",
+  "output": "file listing...",
+  "exitCode": 0
+}
+```
+
+### `fs.snapshot`
+Required payload fields:
+- `workspaceHash`: string
+- `files`: array of objects
+- `files[].path`: string
+- `files[].digest`: string
+- `files[].size`: number
+
+Optional payload fields:
+- `txId`: string
+
+Example payload:
+```json
+{
+  "workspaceHash": "sha256:...",
+  "txId": "tx-01",
+  "files": [
+    { "path": "src/main.ts", "digest": "abc123", "size": 1024 }
+  ]
+}
+```
+
+### `fs.diff`
+Required payload fields:
+- `txId`: string
+- `path`: string
+- `beforeDigest`: string
+- `afterDigest`: string
+- `patch`: object, one of:
+  - `{ "kind": "unified", "text": string }`
+  - `{ "kind": "blob", "digest": string }`
+
+Optional payload fields:
+- none
+
+Example payload:
+```json
+{
+  "txId": "tx-01",
+  "path": "src/main.ts",
+  "beforeDigest": "0a1b2c",
+  "afterDigest": "1c2d3e",
+  "patch": { "kind": "unified", "text": "@@ -1,1 +1,1 @@\\n-old\\n+new" }
+}
+```
+
+### `decision.made`
+Required payload fields:
+- `rationale`: string
+- `plan`: string[]
+
+Optional payload fields:
+- none
+
+Example payload:
+```json
+{
+  "rationale": "Need to inspect project files before edits",
+  "plan": ["ls", "cat package.json", "review output"]
+}
+```
+
+### `invariant.failed`
+Required payload fields:
+- `invariant`: string
+- `message`: string
+- `severity`: `"warn" | "error" | "fatal"`
+
+Optional payload fields:
+- none
+
+Example payload:
+```json
+{
+  "invariant": "plan_before_action",
+  "message": "tool.requested must be caused by decision.made",
+  "severity": "error"
+}
+```
+
+### `budget.exhausted`
+Required payload fields:
+- none
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{
+  "limit": 32000,
+  "used": 32000,
+  "remaining": 0
+}
+```
+
+### `error.raised`
+Required payload fields:
+- `code`: string
+- `message`: string
+
+Optional payload fields:
+- none
+
+Example payload:
+```json
+{
+  "code": "E_TOOL_TIMEOUT",
+  "message": "Tool execution exceeded timeout"
+}
+```
+
+### `run.start` (legacy runtime type)
+Required payload fields:
+- none
+
+Optional payload fields:
+- implementation-defined fields (object)
+
+Example payload:
+```json
+{}
+```
+
+## Replay and verification invariants
+
+- `seq` must be contiguous (`event[i].seq === i`).
+- `id` must equal `sha256(canonical(event_without_id))`.
+- each `causes[]` entry must reference an earlier event in the same run.
+- replayed JSONL must load and verify without mutation.
+
+## Compatibility notes
+
+- `src/runtime/kernel.ts` accepts arbitrary event type strings and does not enforce per-type payload schemas.
+- `packages/core/verify.ts` validates using `packages/core/event.ts` `EventSchema`; this currently accepts canonical event types above, but not `run.start` or `error.raised`.
+- `packages/core/types.ts` is stricter for per-type payloads and includes `error.raised`.
