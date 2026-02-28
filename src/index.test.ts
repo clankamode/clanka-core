@@ -120,3 +120,48 @@ test('formatDiffMarkdown shows field change arrow for modified events', () => {
   assert.ok(md.includes('"ls"'));
   assert.ok(md.includes('"pwd"'));
 });
+
+test('formatDiffMarkdown renders added, removed, and modified lines', () => {
+  const run1: CognitiveEvent[] = [
+    makeEvent({ seq: 0, type: 'run.start', payload: { run: 'r' } }),
+    makeEvent({ seq: 1, type: 'fs.added', payload: { path: 'a.txt' } }),
+    makeEvent({ seq: 3, type: 'fs.changed', payload: { path: 'c.txt', hash: 'old' } }),
+  ];
+  const run2: CognitiveEvent[] = [
+    makeEvent({ seq: 0, type: 'run.start', payload: { run: 'r' } }),
+    makeEvent({ seq: 2, type: 'fs.removed', payload: { path: 'b.txt' } }),
+    makeEvent({ seq: 3, type: 'fs.changed', payload: { path: 'c.txt', hash: 'new' } }),
+  ];
+
+  const md = formatDiffMarkdown(diffRuns('r1', run1, 'r2', run2));
+
+  assert.ok(md.includes('- [fs.added] {"path":"a.txt"}'));
+  assert.ok(md.includes('- [fs.removed] {"path":"b.txt"}'));
+  assert.ok(md.includes('- [fs.changed]: payload.hash changed "old" → "new"'));
+});
+
+test('formatDiffMarkdown handles binary payloads', () => {
+  const binaryEvent = makeEvent({
+    seq: 1,
+    type: 'fs.binary',
+    payload: { path: 'image.png', bytes: Buffer.from([0, 255, 16, 32]) },
+  });
+
+  const md = formatDiffMarkdown(diffRuns('r1', [binaryEvent], 'r2', []));
+
+  assert.ok(md.includes('[fs.binary]'));
+  assert.ok(md.includes('"type":"Buffer"'));
+  assert.ok(md.includes('"data":[0,255,16,32]'));
+});
+
+test('formatDiffMarkdown truncates long payload summaries', () => {
+  const longText = 'x'.repeat(200);
+  const longEvent = makeEvent({ seq: 1, type: 'tool.output', payload: { text: longText } });
+
+  const md = formatDiffMarkdown(diffRuns('r1', [longEvent], 'r2', []));
+  const outputLine = md.split('\n').find(line => line.startsWith('- [tool.output] '));
+
+  assert.ok(outputLine, 'expected tool.output line');
+  assert.ok(outputLine.endsWith('...'), 'expected truncated summary to end with ellipsis');
+  assert.ok(!md.includes('x'.repeat(120)), 'expected long payload to be truncated');
+});
