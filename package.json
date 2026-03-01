@@ -19,7 +19,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "TS_NODE_PROJECT=tsconfig.build.json node --require ts-node/register --test src/index.test.ts src/diff.test.ts src/runtime/kernel.test.ts packages/core/replay.test.ts packages/core/logger.test.ts",
+    "test": "TS_NODE_PROJECT=tsconfig.build.json node --require ts-node/register --test src/index.test.ts src/diff.test.ts src/runtime/kernel.test.ts packages/core/replay.test.ts packages/core/logger.test.ts packages/core/schema-registry.test.ts packages/core/event-store.test.ts",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [],

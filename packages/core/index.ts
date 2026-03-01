@@ -19,6 +19,12 @@ export type {
 export { EventLogger } from './logger.js';
 export type { LoggerConfig } from './logger.js';
 
+export { SchemaRegistry, EventEnvelopeSchema } from './schema-registry.js';
+export type { EventEnvelope } from './schema-registry.js';
+
+export { EventStore } from './event-store.js';
+export type { EventStoreQuery } from './event-store.js';
+
 export { ReplayHarness } from './replay.js';
 export type { MockModel, MockTool, ReplayConfig } from './replay.js';
 
