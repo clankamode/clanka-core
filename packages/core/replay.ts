@@ -53,6 +53,9 @@ export class ReplayHarness {
       if (a.timestamp !== b.timestamp) {
         return a.timestamp - b.timestamp;
       }
+      if (a.type !== b.type) {
+        return a.type.localeCompare(b.type);
+      }
       if (a.seq !== b.seq) {
         return a.seq - b.seq;
       }

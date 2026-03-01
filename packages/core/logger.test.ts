@@ -1,10 +1,11 @@
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import { EventLogger, type LoggerConfig } from './logger';
+import type { Event } from './event';
 
 class CaptureStream extends Writable {
   private chunks: string[] = [];
@@ -35,6 +36,31 @@ function makeLoggerConfig(
   return {
     config,
     cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+function makeEvent({
+  id,
+  seq,
+  timestamp,
+  type,
+  payload = {},
+}: {
+  id: string;
+  seq: number;
+  timestamp: number;
+  type: Event['type'];
+  payload?: Record<string, unknown>;
+}): Event {
+  return {
+    v: 1.1,
+    id,
+    runId: 'run-ordering',
+    seq,
+    type,
+    timestamp,
+    causes: [],
+    payload,
   };
 }
 
@@ -101,4 +127,36 @@ test('structured output flag --json emits JSON lines', () => {
   } finally {
     cleanup();
   }
+});
+
+describe('append/read ordering', () => {
+  test('events are persisted in insertion order', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-ordering', config);
+      const inserted = [
+        makeEvent({ id: 'e-2', seq: 2, timestamp: 200, type: 'tool.responded' }),
+        makeEvent({ id: 'e-0', seq: 0, timestamp: 100, type: 'run.started' }),
+        makeEvent({ id: 'e-1', seq: 1, timestamp: 150, type: 'tool.requested' }),
+      ];
+
+      for (const event of inserted) {
+        await logger.append(event);
+      }
+
+      const restored = await logger.readLog();
+      assert.deepEqual(
+        restored.map(event => event.id),
+        inserted.map(event => event.id),
+      );
+      assert.deepEqual(
+        restored.map(event => event.seq),
+        [2, 0, 1],
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });
