@@ -1,10 +1,17 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
-import { ClankaKernel } from './kernel';
+import { createHash } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ClankaKernel, toCanonical } from './kernel';
+import type { CognitiveEvent } from './kernel';
 import { EventSchema } from '../../packages/core/event';
 
 afterEach(() => {
   vi.useRealTimers();
 });
+
+function withRecomputedId(event: Omit<CognitiveEvent, 'id'>): CognitiveEvent {
+  const id = createHash('sha256').update(toCanonical(event)).digest('hex');
+  return { ...event, id };
+}
 
 describe('runtime event ordering invariants', () => {
   it('maintains monotonic seq and valid backward-only causal links', async () => {
@@ -20,39 +27,39 @@ describe('runtime event ordering invariants', () => {
     expect(kernel.verify()).toEqual({ valid: true, eventCount: 3 });
   });
 
-  it('preserves insertion order in history under sequential writes', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
-
-    const kernel = new ClankaKernel('run-order-preserve');
-    const inserted: string[] = [];
-
-    for (const [type, step] of [
-      ['run.start', 0],
-      ['agent.think', 1],
-      ['tool.call', 2],
-      ['run.end', 3],
-    ] as const) {
-      const e = await kernel.log(type, 'agent', { step });
-      inserted.push(e.id);
-    }
-
-    const history = kernel.getHistory();
-    expect(history.map(e => e.id)).toEqual(inserted);
-    expect(history.map(e => e.payload.step)).toEqual([0, 1, 2, 3]);
-    expect(history.map(e => e.seq)).toEqual([0, 1, 2, 3]);
-  });
-
-  it('rejects forward/self causal references during verify', async () => {
-    const kernel = new ClankaKernel('run-ordering-invalid-cause');
+  it('rejects sequence gaps', async () => {
+    const kernel = new ClankaKernel('run-ordering-gap');
     await kernel.log('run.start', 'agent', {});
+    await kernel.log('agent.think', 'agent', {});
     await kernel.log('run.end', 'agent', {});
 
     const history = kernel.getHistory();
-    const badSecond = { ...history[1], causes: [history[1].id] };
-    kernel.loadHistory([history[0], badSecond]);
+    kernel.loadHistory([history[0], history[2]]);
 
-    expect(() => kernel.verify()).toThrow(/invalid digest/i);
+    expect(() => kernel.verify()).toThrow(/sequence gap/i);
+  });
+
+  it('rejects causal references to future events when digest is still valid', async () => {
+    const kernel = new ClankaKernel('run-ordering-invalid-cause');
+    await kernel.log('run.start', 'agent', { step: 0 });
+    await kernel.log('agent.think', 'agent', { step: 1 });
+    await kernel.log('run.end', 'agent', { step: 2 });
+
+    const history = kernel.getHistory();
+    const { id: _originalId, ...secondWithoutId } = history[1];
+    const mutatedSecond: Omit<CognitiveEvent, 'id'> = {
+      ...secondWithoutId,
+      causes: [history[2].id],
+    };
+
+    const tampered = [
+      history[0],
+      withRecomputedId(mutatedSecond),
+      history[2],
+    ];
+    kernel.loadHistory(tampered);
+
+    expect(() => kernel.verify()).toThrow(/unknown cause|forward|self-referencing/i);
   });
 });
 
@@ -70,6 +77,13 @@ describe('runtime replay determinism', () => {
     await k2.log('run.start', 'agent', { input: 'same' });
     await k2.log('tool.call', 'agent', { tool: 'bash', cmd: 'ls -la' });
 
+    const h1 = k1.getHistory();
+    const h2 = k2.getHistory();
+    expect(h1).toHaveLength(h2.length);
+    for (let i = 0; i < h1.length; i++) {
+      expect(h1[i].id).toBe(h2[i].id);
+      expect(h1[i].timestamp).toBe(h2[i].timestamp);
+    }
     expect(k1.serialize()).toBe(k2.serialize());
   });
 
@@ -154,6 +168,23 @@ describe('invalid event payloads (zod rejection)', () => {
     const parsed = EventSchema.safeParse(invalid);
     expect(parsed.success).toBe(false);
   });
+
+  it('rejects malformed meta fields via EventSchema', () => {
+    const invalid = {
+      v: 1.1,
+      id: 'abc',
+      runId: 'run-zod',
+      seq: 0,
+      type: 'run.started',
+      timestamp: 1700000000000,
+      causes: [],
+      payload: {},
+      meta: { agentId: 42 },
+    };
+
+    const parsed = EventSchema.safeParse(invalid);
+    expect(parsed.success).toBe(false);
+  });
 });
 
 describe('concurrent run isolation', () => {
@@ -217,5 +248,11 @@ describe('concurrent run isolation', () => {
     expect(historyB.every(e => e.runId === 'run-B')).toBe(true);
     expect(historyA.map(e => e.seq)).toEqual([0, 1, 2, 3, 4]);
     expect(historyB.map(e => e.seq)).toEqual([0, 1, 2, 3, 4]);
+
+    const idsA = new Set(historyA.map(e => e.id));
+    const idsB = new Set(historyB.map(e => e.id));
+    for (const id of idsA) {
+      expect(idsB.has(id)).toBe(false);
+    }
   });
 });
