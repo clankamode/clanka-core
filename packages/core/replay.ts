@@ -87,7 +87,7 @@ export class ReplayHarness {
     const minLen = Math.min(log1.length, log2.length);
     
     for (let i = 0; i < minLen; i++) {
-      if (log1[i].digest !== log2[i].digest) {
+      if (log1[i].id !== log2[i].id) {
         return {
           identical: false,
           divergeAt: i,

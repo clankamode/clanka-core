@@ -41,12 +41,12 @@ export class EventLogger {
     
     // If payload is too large, store as blob
     if (payloadSize > this.config.maxPayloadSize) {
-      const blobPath = path.join(this.blobsPath, `${event.digest}.json`);
+      const blobPath = path.join(this.blobsPath, `${event.id}.json`);
       fs.writeFileSync(blobPath, JSON.stringify(event.payload, null, 2));
       
       logEntry = {
         ...event,
-        payload: { _blobRef: event.digest },
+        payload: { _blobRef: event.id },
       };
     }
     
