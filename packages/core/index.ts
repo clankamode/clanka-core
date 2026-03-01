@@ -1,4 +1,28 @@
-export * from './event.js';
-export * from './invariant.js';
-export * from './logger.js';
-export * from './replay.js';
+export {
+  EventSchema,
+  EventTypeSchema,
+  canonicalJSON,
+  contentDigest,
+  createEvent,
+} from './event.js';
+export type { Event, EventType } from './event.js';
+
+export {
+  invariant_planBeforeAction,
+} from './invariant.js';
+export type {
+  Invariant,
+  InvariantContext,
+  InvariantResult,
+} from './invariant.js';
+
+export { EventLogger } from './logger.js';
+export type { LoggerConfig } from './logger.js';
+
+export { ReplayHarness } from './replay.js';
+export type { MockModel, MockTool, ReplayConfig } from './replay.js';
+
+export { ClankaKernel } from './kernel.js';
+export type { KernelConfig } from './kernel.js';
+
+export { verifyRun } from './verify.js';
