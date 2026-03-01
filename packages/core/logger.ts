@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { Writable } from 'node:stream';
 import { Event } from './event.js';
 
 /**
@@ -10,13 +11,20 @@ export interface LoggerConfig {
   runsDir: string;
   blobsDir: string;
   maxPayloadSize: number; // Bytes; larger payloads go to blob storage
+  output?: Writable;
+  cliArgs?: string[];
+  structuredOutput?: boolean;
 }
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export class EventLogger {
   private runId: string;
   private logPath: string;
   private blobsPath: string;
   private config: LoggerConfig;
+  private output: Writable;
+  private structuredOutput: boolean;
 
   constructor(runId: string, config: LoggerConfig) {
     this.runId = runId;
@@ -25,9 +33,44 @@ export class EventLogger {
     // Create run-specific directories
     this.logPath = path.join(config.runsDir, `${runId}.jsonl`);
     this.blobsPath = path.join(config.blobsDir, runId);
+    this.output = config.output || process.stdout;
+    this.structuredOutput = config.structuredOutput ?? (config.cliArgs?.includes('--json') ?? false);
     
     fs.mkdirSync(config.runsDir, { recursive: true });
     fs.mkdirSync(this.blobsPath, { recursive: true });
+  }
+
+  public log(level: LogLevel, message: string, context?: Record<string, unknown>): void {
+    const payload = {
+      timestamp: Date.now(),
+      level,
+      message,
+      ...(context ? { context } : {}),
+    };
+
+    if (this.structuredOutput) {
+      this.output.write(`${JSON.stringify(payload)}\n`);
+      return;
+    }
+
+    const contextText = context ? ` ${JSON.stringify(context)}` : '';
+    this.output.write(`[${level}] ${message}${contextText}\n`);
+  }
+
+  public debug(message: string, context?: Record<string, unknown>): void {
+    this.log('debug', message, context);
+  }
+
+  public info(message: string, context?: Record<string, unknown>): void {
+    this.log('info', message, context);
+  }
+
+  public warn(message: string, context?: Record<string, unknown>): void {
+    this.log('warn', message, context);
+  }
+
+  public error(message: string, context?: Record<string, unknown>): void {
+    this.log('error', message, context);
   }
 
   /**
