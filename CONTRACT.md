@@ -48,6 +48,39 @@ The sections in this file explicitly cover all currently defined event enums/uni
 - `invariant.failed`
 - `error.raised`
 
+### EventLog payload matrix (`packages/core/event.ts`)
+
+| Event type | Required payload fields | Optional payload fields |
+| --- | --- | --- |
+| `run.started` | none | any payload keys (commonly `name`, `version`) |
+| `run.finished` | none | any payload keys (commonly `status`, `commitHash`) |
+| `run.commit` | none | any payload keys |
+| `agent.started` | none | any payload keys |
+| `agent.finished` | none | any payload keys |
+| `model.requested` | none | any payload keys |
+| `model.responded` | none | any payload keys |
+| `tool.requested` | none | any payload keys |
+| `tool.responded` | none | any payload keys |
+| `fs.snapshot` | none | any payload keys |
+| `fs.diff` | none | any payload keys |
+| `decision.made` | none | any payload keys |
+| `invariant.failed` | none | any payload keys (commonly `invariant`, `message`, `severity`, `triggerEventId`) |
+| `budget.exhausted` | none | any payload keys |
+
+### Strict payload matrix (`packages/core/types.ts`)
+
+| Event type | Required payload fields | Optional payload fields |
+| --- | --- | --- |
+| `run.started` | `name`, `version` | none |
+| `run.finished` | `status` | `commitHash` |
+| `decision.made` | `rationale`, `plan` | none |
+| `tool.requested` | `callId`, `txId`, `tool`, `args` | `caps.fsRead`, `caps.fsWrite`, `caps.net` |
+| `tool.responded` | `callId`, `txId`, `output` | `error.code`, `error.message`, `exitCode` |
+| `fs.diff` | `txId`, `path`, `beforeDigest`, `afterDigest`, `patch` | none |
+| `fs.snapshot` | `workspaceHash`, `files[]` (`path`, `digest`, `size`) | `txId` |
+| `invariant.failed` | `invariant`, `message`, `severity` | none |
+| `error.raised` | `code`, `message` | none |
+
 ## run.started
 - Required fields: none
 - Optional fields: any payload keys (commonly `name`, `version`)

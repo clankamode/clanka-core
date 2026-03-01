@@ -64,6 +64,13 @@ describe('line diff rendering', () => {
     const result = diffLines(['\u0000\u0001binary'], ['\u0000\u0002binary'], { contextLines: 0 });
     assert.deepEqual(result, ['-\u0000\u0001binary', '+\u0000\u0002binary']);
   });
+
+  test('single-line modification renders remove/add pair with zero context', () => {
+    const result = diffLines(['alpha', 'bravo', 'charlie'], ['alpha', 'BRAVO', 'charlie'], {
+      contextLines: 0,
+    });
+    assert.deepEqual(result, ['-bravo', '+BRAVO']);
+  });
 });
 
 describe('large diff truncation', () => {
@@ -86,6 +93,18 @@ describe('large diff truncation', () => {
 
     assert.equal(lines.length, 3);
     assert.equal(lines[2], '... (truncated)');
+  });
+
+  test('formatLineDiff uses custom truncation marker for large output', () => {
+    const before = Array.from({ length: 6 }, (_, i) => `before-${i}`);
+    const after = Array.from({ length: 6 }, (_, i) => `after-${i}`);
+    const output = formatLineDiff(before, after, {
+      contextLines: 0,
+      maxLines: 2,
+      truncationMarker: '[snip]',
+    });
+
+    assert.deepEqual(output.split('\n'), ['-before-0', '[snip]']);
   });
 
   test('formatLineDiff does not truncate when lines are within maxLines', () => {
@@ -151,5 +170,18 @@ describe('binary payload handling', () => {
 
     const markdown = formatDiffMarkdown(diffRuns('run-a', [e1], 'run-b', [e2]));
     assert.ok(markdown.includes('payload.patch.digest changed "sha256:abc" → "sha256:def"'));
+  });
+
+  test('formatDiffMarkdown renders binary blob payloads in added/removed sections', () => {
+    const onlyInRun1 = makeEvent({
+      seq: 0,
+      type: 'fs.diff',
+      payload: { path: 'image.png', patch: { kind: 'blob', digest: 'sha256:blob' } },
+    });
+
+    const markdown = formatDiffMarkdown(diffRuns('run-a', [onlyInRun1], 'run-b', []));
+    assert.ok(markdown.includes('- [fs.diff]'));
+    assert.ok(markdown.includes('"kind":"blob"'));
+    assert.ok(markdown.includes('"digest":"sha256:blob"'));
   });
 });
