@@ -61,6 +61,18 @@ describe('runtime event ordering invariants', () => {
 
     expect(() => kernel.verify()).toThrow(/unknown cause|forward|self-referencing/i);
   });
+
+  it('rejects out-of-order history even when each event digest is intact', async () => {
+    const kernel = new ClankaKernel('run-ordering-out-of-order');
+    await kernel.log('run.start', 'agent', {});
+    await kernel.log('agent.think', 'agent', {});
+    await kernel.log('run.end', 'agent', {});
+
+    const [e0, e1, e2] = kernel.getHistory();
+    kernel.loadHistory([e1, e0, e2]);
+
+    expect(() => kernel.verify()).toThrow(/sequence gap/i);
+  });
 });
 
 describe('runtime replay determinism', () => {
@@ -117,6 +129,23 @@ describe('runtime replay determinism', () => {
     expect(replayA.getHistory()).toEqual(replayB.getHistory());
     expect(replayA.serialize()).toBe(replayB.serialize());
     expect(replayA.verify()).toEqual(replayB.verify());
+  });
+
+  it('ignores surrounding blank lines during replay and remains deterministic', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
+
+    const original = new ClankaKernel('run-deterministic-blank-lines');
+    await original.log('run.start', 'agent', { prompt: 'blank-lines' });
+    await original.log('run.end', 'agent', { status: 'ok' });
+
+    const jsonlWithBlanks = `\n${original.serialize()}\n\n`;
+    const replayA = ClankaKernel.fromJSONL('run-deterministic-blank-lines', jsonlWithBlanks);
+    const replayB = ClankaKernel.fromJSONL('run-deterministic-blank-lines', jsonlWithBlanks);
+
+    expect(replayA.getHistory()).toEqual(original.getHistory());
+    expect(replayA.serialize()).toBe(replayB.serialize());
+    expect(replayA.verify()).toEqual({ valid: true, eventCount: 2 });
   });
 });
 
@@ -180,6 +209,37 @@ describe('invalid event payloads (zod rejection)', () => {
       causes: [],
       payload: {},
       meta: { agentId: 42 },
+    };
+
+    const parsed = EventSchema.safeParse(invalid);
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects missing payload field via EventSchema', () => {
+    const invalid = {
+      v: 1.1,
+      id: 'abc',
+      runId: 'run-zod',
+      seq: 0,
+      type: 'run.started',
+      timestamp: 1700000000000,
+      causes: [],
+    };
+
+    const parsed = EventSchema.safeParse(invalid);
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects non-string cause IDs via EventSchema', () => {
+    const invalid = {
+      v: 1.1,
+      id: 'abc',
+      runId: 'run-zod',
+      seq: 0,
+      type: 'run.started',
+      timestamp: 1700000000000,
+      causes: ['ok', 42],
+      payload: {},
     };
 
     const parsed = EventSchema.safeParse(invalid);
@@ -254,5 +314,31 @@ describe('concurrent run isolation', () => {
     for (const id of idsA) {
       expect(idsB.has(id)).toBe(false);
     }
+  });
+
+  it('verifies each concurrent run independently and keeps serialization isolated', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T00:00:00.000Z'));
+
+    const left = new ClankaKernel('run-left');
+    const right = new ClankaKernel('run-right');
+
+    await Promise.all([
+      (async () => {
+        for (let i = 0; i < 6; i++) {
+          await left.log('agent.step', 'agent-left', { i, run: 'left' });
+        }
+      })(),
+      (async () => {
+        for (let i = 0; i < 6; i++) {
+          await right.log('agent.step', 'agent-right', { i, run: 'right' });
+        }
+      })(),
+    ]);
+
+    expect(left.verify()).toEqual({ valid: true, eventCount: 6 });
+    expect(right.verify()).toEqual({ valid: true, eventCount: 6 });
+    expect(left.serialize().includes('"run-right"')).toBe(false);
+    expect(right.serialize().includes('"run-left"')).toBe(false);
   });
 });
