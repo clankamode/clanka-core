@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Writable } from 'node:stream';
-import { Event } from './event.js';
+import { EventSchema, type Event } from './event';
 
 /**
  * EventLogger: Append-only JSONL with blob storage for large payloads.
@@ -78,18 +78,23 @@ export class EventLogger {
    * Large payloads are stored in blobs/ and referenced by digest.
    */
   public async append(event: Event): Promise<void> {
-    const payloadSize = JSON.stringify(event.payload).length;
+    const parsed = EventSchema.safeParse(event);
+    if (!parsed.success) {
+      throw new TypeError(`Invalid event: ${parsed.error.message}`);
+    }
+
+    const payloadSize = JSON.stringify(parsed.data.payload).length;
     
-    let logEntry = { ...event };
+    let logEntry = { ...parsed.data };
     
     // If payload is too large, store as blob
     if (payloadSize > this.config.maxPayloadSize) {
-      const blobPath = path.join(this.blobsPath, `${event.id}.json`);
-      fs.writeFileSync(blobPath, JSON.stringify(event.payload, null, 2));
+      const blobPath = path.join(this.blobsPath, `${parsed.data.id}.json`);
+      fs.writeFileSync(blobPath, JSON.stringify(parsed.data.payload, null, 2));
       
       logEntry = {
-        ...event,
-        payload: { _blobRef: event.id },
+        ...parsed.data,
+        payload: { _blobRef: parsed.data.id },
       };
     }
     

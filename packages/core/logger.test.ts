@@ -160,3 +160,110 @@ describe('append/read ordering', () => {
     }
   });
 });
+
+describe('append validation (zod)', () => {
+  test('rejects unknown event type', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-type', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-1', seq: 0, timestamp: 100, type: 'run.started' }),
+        type: 'not.a.real.type',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects non-object payload', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-payload', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-2', seq: 0, timestamp: 100, type: 'run.started' }),
+        payload: 'not-an-object',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects missing id field', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-missing-id', config);
+      const { id: _id, ...withoutId } = makeEvent({
+        id: 'bad-3',
+        seq: 0,
+        timestamp: 100,
+        type: 'run.started',
+      });
+
+      await assert.rejects(logger.append(withoutId as unknown as Event), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects malformed causes field', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-causes', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-4', seq: 0, timestamp: 100, type: 'run.started' }),
+        causes: 'not-an-array',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects malformed meta field values', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-meta', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-5', seq: 0, timestamp: 100, type: 'run.started' }),
+        meta: { agentId: 123 },
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('accepts a valid event payload', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-valid-event', config);
+      const valid = makeEvent({ id: 'ok-1', seq: 0, timestamp: 100, type: 'run.started' });
+      await logger.append(valid);
+
+      const restored = await logger.readLog();
+      assert.equal(restored.length, 1);
+      assert.equal(restored[0].id, 'ok-1');
+      assert.equal(restored[0].type, 'run.started');
+    } finally {
+      cleanup();
+    }
+  });
+});
