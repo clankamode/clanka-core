@@ -22,6 +22,27 @@ export interface RunDiffResult {
   modified: ModifiedEvent[];
 }
 
+export interface LineDiffOptions {
+  contextLines?: number;
+}
+
+export interface FormatLineDiffOptions extends LineDiffOptions {
+  maxLines?: number;
+  truncationMarker?: string;
+}
+
+export interface FormatLineDiffDeps {
+  truncateLines?: (lines: string[], maxLines: number, truncationMarker: string) => string[];
+  joinLines?: (lines: string[]) => string;
+}
+
+type LineChangeKind = 'context' | 'add' | 'remove';
+
+interface LineChange {
+  kind: LineChangeKind;
+  line: string;
+}
+
 function flattenPayload(obj: unknown, prefix = ''): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   if (obj === null || typeof obj !== 'object') {
@@ -103,9 +124,154 @@ export function diffRuns(
   return { runId1, runId2, onlyInRun1, onlyInRun2, modified };
 }
 
-function payloadSummary(payload: unknown): string {
+function normalizeInputLines(input: string | string[]): string[] {
+  if (Array.isArray(input)) {
+    return [...input];
+  }
+  return input.split(/\r?\n/);
+}
+
+function buildLineChanges(beforeLines: string[], afterLines: string[]): LineChange[] {
+  const n = beforeLines.length;
+  const m = afterLines.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      if (beforeLines[i] === afterLines[j]) {
+        lcs[i][j] = lcs[i + 1][j + 1] + 1;
+      } else {
+        lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+    }
+  }
+
+  const changes: LineChange[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (beforeLines[i] === afterLines[j]) {
+      changes.push({ kind: 'context', line: beforeLines[i] });
+      i++;
+      j++;
+      continue;
+    }
+
+    if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      changes.push({ kind: 'remove', line: beforeLines[i] });
+      i++;
+    } else {
+      changes.push({ kind: 'add', line: afterLines[j] });
+      j++;
+    }
+  }
+
+  while (i < n) {
+    changes.push({ kind: 'remove', line: beforeLines[i] });
+    i++;
+  }
+  while (j < m) {
+    changes.push({ kind: 'add', line: afterLines[j] });
+    j++;
+  }
+
+  return changes;
+}
+
+function renderLineChange(change: LineChange): string {
+  if (change.kind === 'add') return `+${change.line}`;
+  if (change.kind === 'remove') return `-${change.line}`;
+  return ` ${change.line}`;
+}
+
+function renderWithContext(changes: LineChange[], contextLines: number): string[] {
+  const changedIndexes: number[] = [];
+  for (let idx = 0; idx < changes.length; idx++) {
+    if (changes[idx].kind !== 'context') {
+      changedIndexes.push(idx);
+    }
+  }
+
+  if (changedIndexes.length === 0) {
+    return [];
+  }
+
+  const keep = Array(changes.length).fill(false);
+  for (const idx of changedIndexes) {
+    const start = Math.max(0, idx - contextLines);
+    const end = Math.min(changes.length - 1, idx + contextLines);
+    for (let i = start; i <= end; i++) {
+      keep[i] = true;
+    }
+  }
+
+  const rendered: string[] = [];
+  let skipping = false;
+  for (let idx = 0; idx < changes.length; idx++) {
+    if (!keep[idx]) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && rendered.length > 0 && rendered[rendered.length - 1] !== '...') {
+      rendered.push('...');
+    }
+    rendered.push(renderLineChange(changes[idx]));
+    skipping = false;
+  }
+
+  return rendered;
+}
+
+export function diffLines(
+  before: string | string[],
+  after: string | string[],
+  options: LineDiffOptions = {},
+): string[] {
+  const contextLines = Math.max(0, options.contextLines ?? 3);
+  const beforeLines = normalizeInputLines(before);
+  const afterLines = normalizeInputLines(after);
+  const changes = buildLineChanges(beforeLines, afterLines);
+  return renderWithContext(changes, contextLines);
+}
+
+export function truncateDiffLines(
+  lines: string[],
+  maxLines: number,
+  truncationMarker = '... (truncated)',
+): string[] {
+  if (lines.length <= maxLines) {
+    return [...lines];
+  }
+  if (maxLines <= 1) {
+    return [truncationMarker];
+  }
+  return [...lines.slice(0, maxLines - 1), truncationMarker];
+}
+
+export function formatLineDiff(
+  before: string | string[],
+  after: string | string[],
+  options: FormatLineDiffOptions = {},
+  deps: FormatLineDiffDeps = {},
+): string {
+  const truncationMarker = options.truncationMarker ?? '... (truncated)';
+  let lines = diffLines(before, after, options);
+  if (lines.length === 0) {
+    return '';
+  }
+
+  if (typeof options.maxLines === 'number') {
+    const truncate = deps.truncateLines ?? truncateDiffLines;
+    lines = truncate(lines, options.maxLines, truncationMarker);
+  }
+
+  const joinLines = deps.joinLines ?? ((parts: string[]) => parts.join('\n'));
+  return joinLines(lines);
+}
+
+export function summarizePayload(payload: unknown, maxLength = 80): string {
   const s = JSON.stringify(payload);
-  return s.length > 80 ? s.slice(0, 77) + '...' : s;
+  return s.length > maxLength ? s.slice(0, maxLength - 3) + '...' : s;
 }
 
 export function formatDiffMarkdown(diff: RunDiffResult): string {
@@ -118,7 +284,7 @@ export function formatDiffMarkdown(diff: RunDiffResult): string {
     lines.push('_none_');
   } else {
     for (const e of diff.onlyInRun1) {
-      lines.push(`- [${e.type}] ${payloadSummary(e.payload)}`);
+      lines.push(`- [${e.type}] ${summarizePayload(e.payload)}`);
     }
   }
   lines.push('');
@@ -128,7 +294,7 @@ export function formatDiffMarkdown(diff: RunDiffResult): string {
     lines.push('_none_');
   } else {
     for (const e of diff.onlyInRun2) {
-      lines.push(`- [${e.type}] ${payloadSummary(e.payload)}`);
+      lines.push(`- [${e.type}] ${summarizePayload(e.payload)}`);
     }
   }
   lines.push('');

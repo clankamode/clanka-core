@@ -1,10 +1,11 @@
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import { EventLogger, type LoggerConfig } from './logger';
+import type { Event } from './event';
 
 class CaptureStream extends Writable {
   private chunks: string[] = [];
@@ -35,6 +36,31 @@ function makeLoggerConfig(
   return {
     config,
     cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+function makeEvent({
+  id,
+  seq,
+  timestamp,
+  type,
+  payload = {},
+}: {
+  id: string;
+  seq: number;
+  timestamp: number;
+  type: Event['type'];
+  payload?: Record<string, unknown>;
+}): Event {
+  return {
+    v: 1.1,
+    id,
+    runId: 'run-ordering',
+    seq,
+    type,
+    timestamp,
+    causes: [],
+    payload,
   };
 }
 
@@ -101,4 +127,143 @@ test('structured output flag --json emits JSON lines', () => {
   } finally {
     cleanup();
   }
+});
+
+describe('append/read ordering', () => {
+  test('events are persisted in insertion order', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-ordering', config);
+      const inserted = [
+        makeEvent({ id: 'e-2', seq: 2, timestamp: 200, type: 'tool.responded' }),
+        makeEvent({ id: 'e-0', seq: 0, timestamp: 100, type: 'run.started' }),
+        makeEvent({ id: 'e-1', seq: 1, timestamp: 150, type: 'tool.requested' }),
+      ];
+
+      for (const event of inserted) {
+        await logger.append(event);
+      }
+
+      const restored = await logger.readLog();
+      assert.deepEqual(
+        restored.map(event => event.id),
+        inserted.map(event => event.id),
+      );
+      assert.deepEqual(
+        restored.map(event => event.seq),
+        [2, 0, 1],
+      );
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe('append validation (zod)', () => {
+  test('rejects unknown event type', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-type', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-1', seq: 0, timestamp: 100, type: 'run.started' }),
+        type: 'not.a.real.type',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects non-object payload', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-payload', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-2', seq: 0, timestamp: 100, type: 'run.started' }),
+        payload: 'not-an-object',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects missing id field', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-missing-id', config);
+      const { id: _id, ...withoutId } = makeEvent({
+        id: 'bad-3',
+        seq: 0,
+        timestamp: 100,
+        type: 'run.started',
+      });
+
+      await assert.rejects(logger.append(withoutId as unknown as Event), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects malformed causes field', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-causes', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-4', seq: 0, timestamp: 100, type: 'run.started' }),
+        causes: 'not-an-array',
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('rejects malformed meta field values', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-invalid-meta', config);
+      const invalid = {
+        ...makeEvent({ id: 'bad-5', seq: 0, timestamp: 100, type: 'run.started' }),
+        meta: { agentId: 123 },
+      } as unknown as Event;
+
+      await assert.rejects(logger.append(invalid), /Invalid event/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('accepts a valid event payload', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output);
+
+    try {
+      const logger = new EventLogger('run-valid-event', config);
+      const valid = makeEvent({ id: 'ok-1', seq: 0, timestamp: 100, type: 'run.started' });
+      await logger.append(valid);
+
+      const restored = await logger.readLog();
+      assert.equal(restored.length, 1);
+      assert.equal(restored[0].id, 'ok-1');
+      assert.equal(restored[0].type, 'run.started');
+    } finally {
+      cleanup();
+    }
+  });
 });
