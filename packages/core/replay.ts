@@ -42,6 +42,24 @@ export class ReplayHarness {
     this.runId = this.events[0]?.runId || 'unknown';
   }
 
+  private normalizeEvents(events: Event[]): Event[] {
+    // Keep the last copy for duplicate IDs so replay is deterministic.
+    const lastById = new Map<string, Event>();
+    for (const event of events) {
+      lastById.set(event.id, event);
+    }
+
+    return Array.from(lastById.values()).sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      if (a.seq !== b.seq) {
+        return a.seq - b.seq;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }
+
   /**
    * Replay: Execute the log deterministically.
    * When tool.requested is encountered, mock the response from tool.responded.
@@ -52,22 +70,17 @@ export class ReplayHarness {
     invariantResults: { invariant: string; result: InvariantResult }[];
     events: Event[];
   }> {
-    const replayedEvents: Event[] = [];
+    const replayedEvents = this.normalizeEvents(this.events);
     const invariantResults: { invariant: string; result: InvariantResult }[] = [];
-    
-    // First pass: walk through the log
-    for (const event of this.events) {
-      replayedEvents.push(event);
-    }
-    
+
     // Second pass: check all invariants
     for (const invariant of this.invariants) {
       const result = await invariant.check({ events: replayedEvents, runId: this.runId });
       invariantResults.push({ invariant: invariant.name, result });
     }
-    
+
     const success = invariantResults.every(r => r.result.valid);
-    
+
     return {
       success,
       invariantResults,
