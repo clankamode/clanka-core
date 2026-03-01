@@ -4,6 +4,9 @@ import { toCanonical, ClankaKernel } from './kernel';
 import type { CognitiveEvent } from './kernel';
 import { EventSchema } from '../../packages/core/event';
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // toCanonical()
@@ -76,8 +79,8 @@ test('log: seq numbers are strictly increasing from 0', async () => {
   assert.ok(e2.seq > e1.seq);
 });
 
-function recalcId(event: Omit<CognitiveEvent, 'id'>): string {
-  const { id: _, ...eventWithoutId } = event as Omit<CognitiveEvent, 'id'> & { id?: string };
+function recalcId(event: Record<string, unknown>): string {
+  const { id: _, ...eventWithoutId } = event as Record<string, unknown> & { id?: string };
   return createHash('sha256').update(toCanonical(eventWithoutId)).digest('hex');
 }
 
@@ -171,6 +174,69 @@ test('log: concurrent calls preserve contiguous sequence ordering per kernel', a
   await Promise.all(writes);
 
   assert.deepEqual(kernel.getHistory().map(e => e.seq), Array.from({ length: 25 }, (_, i) => i));
+  assert.equal(kernel.verify().valid, true);
+});
+
+test('verify: throws when the first event sequence is not zero', async () => {
+  const kernel = new ClankaKernel('run-start-seq');
+  await kernel.log('run.start', 'agent', { msg: 'hi' });
+
+  const [first] = kernel.getHistory();
+  const shiftedFirst = { ...first, seq: 1 };
+  kernel.loadHistory([{ ...shiftedFirst, id: recalcId(shiftedFirst) } as CognitiveEvent]);
+
+  assert.throws(() => kernel.verify(), /Sequence gap/);
+});
+
+test('verify: throws when history entries are loaded out of sequence order', async () => {
+  const kernel = new ClankaKernel('run-out-of-order');
+  await kernel.log('run.start', 'agent', {});
+  await kernel.log('run.middle', 'agent', {});
+  await kernel.log('run.end', 'agent', {});
+
+  const [e0, e1, e2] = kernel.getHistory();
+  kernel.loadHistory([e1, e0, e2]);
+
+  assert.throws(() => kernel.verify(), /Sequence gap/);
+});
+
+test('verify: allows replayed events with omitted causes field', async () => {
+  const kernel = new ClankaKernel('run-optional-causes');
+  await kernel.log('run.start', 'agent', { stage: 'start' });
+
+  const [event] = kernel.getHistory();
+  const { causes: _causes, ...withoutCauses } = event as CognitiveEvent & { causes?: string[] };
+  const replayEvent = { ...withoutCauses, id: recalcId(withoutCauses) } as CognitiveEvent;
+
+  const replayKernel = new ClankaKernel('run-optional-causes');
+  replayKernel.loadHistory([replayEvent]);
+
+  assert.equal(replayKernel.verify().valid, true);
+  assert.equal(replayKernel.verify().eventCount, 1);
+});
+
+test('registerInvariant: appends invariant.failed after a violating event with causal link', async () => {
+  const kernel = new ClankaKernel('run-invariant-failure');
+  kernel.registerInvariant({
+    name: 'tool_requires_plan',
+    description: 'tool.requested must be justified by a decision',
+    async check(ctx: { events: CognitiveEvent[] }) {
+      const last = ctx.events[ctx.events.length - 1];
+      if (last?.type === 'tool.requested') {
+        return { valid: false, message: 'missing decision cause', severity: 'error' };
+      }
+      return { valid: true };
+    },
+  });
+
+  const trigger = await kernel.log('tool.requested', 'agent', { tool: 'bash', cmd: 'ls' });
+  const history = kernel.getHistory();
+
+  assert.equal(history.length, 2);
+  assert.equal(history[1].type, 'invariant.failed');
+  assert.equal(history[1].seq, 1);
+  assert.deepEqual(history[1].causes, [trigger.id]);
+  assert.equal(history[1].payload.invariant, 'tool_requires_plan');
   assert.equal(kernel.verify().valid, true);
 });
 
@@ -294,6 +360,52 @@ test('replay: payload key order does not change ids', async () => {
     assert.equal(h2[0].timestamp, fixedNow);
   } finally {
     (Date as unknown as { now: () => number }).now = originalNow;
+  }
+});
+
+test('replay: repeated serialize calls are stable for unchanged history', async () => {
+  const kernel = new ClankaKernel('run-serialize-stable');
+  await kernel.log('run.start', 'agent', { attempt: 1 });
+  await kernel.log('run.end', 'agent', { status: 'ok' });
+
+  const s1 = kernel.serialize();
+  const s2 = kernel.serialize();
+  const s3 = kernel.serialize();
+
+  assert.equal(s1, s2);
+  assert.equal(s2, s3);
+});
+
+test('replay: fromJSONL ignores surrounding blank lines', async () => {
+  const kernel = new ClankaKernel('run-jsonl-blank-lines');
+  await kernel.log('run.start', 'agent', { prompt: 'hello' });
+  await kernel.log('run.end', 'agent', { status: 'ok' });
+
+  const jsonl = `\n${kernel.serialize()}\n\n`;
+  const restored = ClankaKernel.fromJSONL('run-jsonl-blank-lines', jsonl);
+
+  assert.deepEqual(restored.getHistory(), kernel.getHistory());
+  assert.equal(restored.verify().valid, true);
+});
+
+test('replay: loadFromFile restores deterministic history', async () => {
+  const runId = 'run-load-from-file';
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-core-'));
+  const runsDir = path.join(tmpDir, 'runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+
+  try {
+    const kernel = new ClankaKernel(runId);
+    await kernel.log('run.start', 'agent', { source: 'disk' });
+    await kernel.log('run.end', 'agent', { source: 'disk' });
+
+    fs.writeFileSync(path.join(runsDir, `${runId}.jsonl`), `${kernel.serialize()}\n`, 'utf-8');
+
+    const loaded = ClankaKernel.loadFromFile(runId, runsDir);
+    assert.deepEqual(loaded.getHistory(), kernel.getHistory());
+    assert.equal(loaded.verify().valid, true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
@@ -427,6 +539,37 @@ test('EventSchema: rejects wrong field types', () => {
   assert.equal(parsed.success, false);
 });
 
+test('EventSchema: rejects non-string cause IDs', () => {
+  const parsed = EventSchema.safeParse({
+    ...buildValidEvent(),
+    causes: ['valid-cause', 123],
+  });
+  assert.equal(parsed.success, false);
+});
+
+test('EventSchema: rejects malformed meta.tool/meta.model values', () => {
+  const parsed = EventSchema.safeParse({
+    ...buildValidEvent(),
+    meta: { agentId: 'agent-1', tool: 999, model: false },
+  });
+  assert.equal(parsed.success, false);
+});
+
+test('EventSchema: rejects missing payload field', () => {
+  const { payload: _payload, ...withoutPayload } = buildValidEvent();
+  const parsed = EventSchema.safeParse(withoutPayload);
+  assert.equal(parsed.success, false);
+});
+
+test('EventSchema: accepts optional meta.tool/model with causes omitted', () => {
+  const { causes: _causes, ...withoutCauses } = buildValidEvent();
+  const parsed = EventSchema.safeParse({
+    ...withoutCauses,
+    meta: { agentId: 'agent-1', tool: 'bash', model: 'gpt-5' },
+  });
+  assert.equal(parsed.success, true);
+});
+
 // ---------------------------------------------------------------------------
 // Concurrent run isolation
 // ---------------------------------------------------------------------------
@@ -508,4 +651,67 @@ test('concurrent run logging does not leak event ids across histories', async ()
   for (const id of idsA) {
     assert.ok(!idsB.has(id));
   }
+});
+
+test('concurrent runs with identical payloads still produce distinct ids by runId', async () => {
+  const fixedNow = 1700000002000;
+  const originalNow = Date.now;
+  (Date as unknown as { now: () => number }).now = () => fixedNow;
+
+  try {
+    const alpha = new ClankaKernel('run-alpha-same-payload');
+    const beta = new ClankaKernel('run-beta-same-payload');
+
+    const [a, b] = await Promise.all([
+      alpha.log('model.requested', 'agent', { prompt: 'same' }),
+      beta.log('model.requested', 'agent', { prompt: 'same' }),
+    ]);
+
+    assert.notEqual(a.id, b.id);
+    assert.equal(alpha.verify().valid, true);
+    assert.equal(beta.verify().valid, true);
+  } finally {
+    (Date as unknown as { now: () => number }).now = originalNow;
+  }
+});
+
+test('interleaved concurrent runs verify independently', async () => {
+  const alpha = new ClankaKernel('run-alpha-verify');
+  const beta = new ClankaKernel('run-beta-verify');
+
+  await Promise.all([
+    (async () => {
+      for (let i = 0; i < 8; i++) {
+        await alpha.log('agent.think', 'agent-a', { i, run: 'alpha' });
+      }
+    })(),
+    (async () => {
+      for (let i = 0; i < 8; i++) {
+        await beta.log('agent.think', 'agent-b', { i, run: 'beta' });
+      }
+    })(),
+  ]);
+
+  assert.equal(alpha.verify().valid, true);
+  assert.equal(beta.verify().valid, true);
+  assert.deepEqual(alpha.getHistory().map(e => e.seq), Array.from({ length: 8 }, (_, i) => i));
+  assert.deepEqual(beta.getHistory().map(e => e.seq), Array.from({ length: 8 }, (_, i) => i));
+});
+
+test('serialize: each run output only contains its own runId under concurrency', async () => {
+  const alpha = new ClankaKernel('run-alpha-serialize');
+  const beta = new ClankaKernel('run-beta-serialize');
+
+  await Promise.all([
+    alpha.log('run.start', 'agent-a', { run: 'alpha' }),
+    alpha.log('run.end', 'agent-a', { run: 'alpha' }),
+    beta.log('run.start', 'agent-b', { run: 'beta' }),
+    beta.log('run.end', 'agent-b', { run: 'beta' }),
+  ]);
+
+  const alphaEvents = alpha.serialize().split('\n').filter(Boolean).map(line => JSON.parse(line) as CognitiveEvent);
+  const betaEvents = beta.serialize().split('\n').filter(Boolean).map(line => JSON.parse(line) as CognitiveEvent);
+
+  assert.equal(alphaEvents.every(e => e.runId === 'run-alpha-serialize'), true);
+  assert.equal(betaEvents.every(e => e.runId === 'run-beta-serialize'), true);
 });

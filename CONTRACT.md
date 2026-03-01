@@ -14,6 +14,40 @@ Payload contract in EventLog:
 - `packages/core/event.ts` defines `payload` as `Record<string, any>`.
 - Required payload fields below are therefore `none` unless explicitly stated.
 
+## Coverage checklist
+
+The sections in this file explicitly cover all currently defined event enums/unions with:
+- required fields
+- optional fields
+- example payloads
+
+`packages/core/event.ts` (`EventTypeSchema`) coverage:
+- `run.started`
+- `run.finished`
+- `run.commit`
+- `agent.started`
+- `agent.finished`
+- `model.requested`
+- `model.responded`
+- `tool.requested`
+- `tool.responded`
+- `fs.snapshot`
+- `fs.diff`
+- `decision.made`
+- `invariant.failed`
+- `budget.exhausted`
+
+`packages/core/types.ts` (`EventSchema` discriminated union) coverage:
+- `run.started`
+- `run.finished`
+- `decision.made`
+- `tool.requested`
+- `tool.responded`
+- `fs.diff`
+- `fs.snapshot`
+- `invariant.failed`
+- `error.raised`
+
 ## run.started
 - Required fields: none
 - Optional fields: any payload keys (commonly `name`, `version`)
