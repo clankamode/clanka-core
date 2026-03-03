@@ -13,8 +13,8 @@
 - [ ] **Add `packages/` sub-package structure** — split into `@clankamode/core-runtime` and `@clankamode/core-cli`
 
 ## 🟢 Low Priority / Nice to Have
-- [ ] **`dogfood.ts` / `dogfood-simple.ts` cleanup** — move to `examples/` or delete if superseded
-- [ ] **`test-ls.ts` / `gen-golden.ts` cleanup** — remove or move root-level scratch files
+- [x] **`dogfood.ts` / `dogfood-simple.ts` cleanup** — remove superseded scratch scripts
+- [x] **`test-ls.ts` / `gen-golden.ts` cleanup** — remove superseded scratch scripts
 
 ## 🧠 Notes
 - CLI: `node dist/cli.js <command>` — commands: `run`, `log`
