@@ -171,7 +171,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 - [x] Milestone 2: replay command implemented and smoke-tested
 - [x] Milestone 3: replay tests added, TASKS.md updated
 - [x] All acceptance criteria passing
-- [ ] Outcomes & Retrospective written
+- [x] Outcomes & Retrospective written
 
 ---
 
@@ -202,4 +202,15 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 
 ## Outcomes & Retrospective
 
-*(not yet complete)*
+- Test-suite mismatch resolved for vitest runs:
+  - Converted existing `node:test` imports in active test files to `vitest`.
+  - Added `vitest.config.ts` to scope discovery to `src/**/*.test.ts` and `packages/**/*.test.ts`, excluding `dist/**`.
+- Replay CLI command shipped:
+  - Added `replay <runId>` to CLI usage.
+  - Implemented replay output format in `src/cli.ts` as `+<deltaMs>ms  [<seq>]  <type>  <payload-preview>`.
+  - Wired replay command dispatch into `main()`.
+- Replay command coverage added:
+  - Added a replay command test in `src/index.test.ts` asserting line count, `+0ms` first event, and seq-order output.
+  - Marked `CLI: replay command` done in `TASKS.md`.
+- Final verification:
+  - `npx vitest run` (final pass): **8 test files**, **150 tests passed**, **0 failed**.
