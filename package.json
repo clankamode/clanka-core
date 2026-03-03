@@ -20,6 +20,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "npx vitest run",
+    "prepare": "git config core.hooksPath .githooks",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [],

@@ -1,0 +1,16 @@
+#!/bin/sh
+
+echo "pre-push: running tests..."
+if ! npm test; then
+  echo "pre-push: tests failed. Push aborted."
+  exit 1
+fi
+
+echo "pre-push: running lint (if configured)..."
+if ! npm run lint --if-present; then
+  echo "pre-push: lint failed. Push aborted."
+  exit 1
+fi
+
+echo "pre-push: checks passed."
+exit 0
