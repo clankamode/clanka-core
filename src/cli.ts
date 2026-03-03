@@ -12,6 +12,7 @@ function usage() {
   console.log('Commands:');
   console.log('  run <runId>');
   console.log('  log <runId> <type> <payload-json>');
+  console.log('  replay <runId>');
   console.log('  verify <runId>');
   console.log('  ls');
   console.log('  export <runId>');
@@ -61,6 +62,18 @@ async function cmdLog(runId: string, type: string, payloadJson: string) {
 
   const count = kernel.getHistory().length;
   console.log(`${runId} ${count}`);
+}
+
+export function cmdReplay(runId: string, writeLine: (line: string) => void = console.log) {
+  const kernel = loadRun(runId);
+  const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
+  const firstTimestamp = events[0]?.timestamp ?? 0;
+
+  for (const event of events) {
+    const deltaMs = event.timestamp - firstTimestamp;
+    const payloadPreview = JSON.stringify(event.payload).slice(0, 80);
+    writeLine(`+${deltaMs}ms  [${event.seq}]  ${event.type}  ${payloadPreview}`);
+  }
 }
 
 function cmdVerify(runId: string) {
@@ -152,6 +165,13 @@ async function main() {
     return;
   }
 
+  if (command === 'replay') {
+    const runId = args[0];
+    if (!runId) throw new Error('replay requires <runId>');
+    cmdReplay(runId);
+    return;
+  }
+
   if (command === 'ls') {
     cmdLs();
     return;
@@ -177,8 +197,10 @@ async function main() {
   process.exit(2);
 }
 
-main().catch(error => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(1);
-});
+if (process.env.CLANKA_CORE_CLI_TEST !== '1') {
+  main().catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  });
+}

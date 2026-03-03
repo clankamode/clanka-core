@@ -8,7 +8,7 @@
 
 ## 🟡 Medium Priority
 - [x] **`diff.ts` — add tests** — write tests for: added/removed/modified lines, binary file handling, large diff truncation
-- [ ] **CLI: `replay` command** — `node dist/cli.js replay <runId>` replays a recorded run with event stream + timestamps
+- [x] **CLI: `replay` command** — `node dist/cli.js replay <runId>` replays a recorded run with event stream + timestamps
 - [ ] **CLI: `export` command** — `node dist/cli.js export <runId> --format json|markdown`
 - [ ] **Add `packages/` sub-package structure** — split into `@clankamode/core-runtime` and `@clankamode/core-cli`
 
