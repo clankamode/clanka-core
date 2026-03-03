@@ -137,7 +137,7 @@ Commit: `feat(cli): add replay command`
     node dist/cli.js replay smoke-replay-check 2>&1 | grep -E '^\+[0-9]'
     # Expected: lines starting with +0ms or similar
 
-**Status:** pending
+**Status:** done
 
 ---
 
@@ -168,7 +168,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 ## Progress
 
 - [x] Milestone 1: test suite fixed (npx vitest run exits 0)
-- [ ] Milestone 2: replay command implemented and smoke-tested
+- [x] Milestone 2: replay command implemented and smoke-tested
 - [ ] Milestone 3: replay tests added, TASKS.md updated
 - [ ] All acceptance criteria passing
 - [ ] Outcomes & Retrospective written
@@ -182,12 +182,17 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
   - `FAIL  dist/index.test.js ... Error: No test suite found`
   - `FAIL  dist/runtime/kernel.test.js ... Error: No test suite found`
 - Adding `vitest.config.ts` with `include: ['src/**/*.test.ts', 'packages/**/*.test.ts']` and `exclude: ['dist/**', 'node_modules/**']` resolved accidental `dist/` suite pickup.
+- Replay smoke output can legitimately show multiple `+0ms` lines when adjacent events share the same `Date.now()` tick.
+  Evidence:
+  - `+0ms  [0]  run.start  {}`
+  - `+0ms  [1]  run.commit  {}`
 
 ---
 
 ## Decision Log
 
 - Milestone 1 course correction: after converting test imports from `node:test` to `vitest`, added explicit vitest discovery config to exclude `dist/**` because stale compiled test files caused false failures. This kept the migration scoped and preserved all 149 test assertions.
+- Milestone 2 implementation choice: used existing `loadRun()` + `getHistory()` in `src/cli.ts` instead of `ReplayHarness`, because CLI replay only needs persisted event playback and timestamp delta formatting; kernel history already preserves persisted run ordering and data.
 
 ---
 
