@@ -189,6 +189,9 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 - `src/cli.ts` executes `main()` at module load, which blocks direct unit testing unless command execution is gated in test mode.
   Evidence:
   - replay tests require importing `cmdReplay` without triggering CLI argument parsing and `process.exit()`.
+- After migrating tests to vitest syntax, `npm test` still pointed at Node's built-in test runner and failed to load `vitest` in CJS mode.
+  Evidence:
+  - `Error: Vitest cannot be imported in a CommonJS module using require()`
 
 ---
 
@@ -197,6 +200,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 - Milestone 1 course correction: after converting test imports from `node:test` to `vitest`, added explicit vitest discovery config to exclude `dist/**` because stale compiled test files caused false failures. This kept the migration scoped and preserved all 149 test assertions.
 - Milestone 2 implementation choice: used existing `loadRun()` + `getHistory()` in `src/cli.ts` instead of `ReplayHarness`, because CLI replay only needs persisted event playback and timestamp delta formatting; kernel history already preserves persisted run ordering and data.
 - Milestone 3 testability adjustment: exported `cmdReplay()` and gated `main()` behind `CLANKA_CORE_CLI_TEST=1` during tests so vitest can import command logic directly without subprocess overhead.
+- Post-milestone stability fix: updated `package.json` `test` script to `npx vitest run` so the default test command matches the active test framework and passes in this repository.
 
 ---
 
@@ -212,5 +216,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 - Replay command coverage added:
   - Added a replay command test in `src/index.test.ts` asserting line count, `+0ms` first event, and seq-order output.
   - Marked `CLI: replay command` done in `TASKS.md`.
+- Default test command aligned:
+  - Updated `npm test` to run vitest directly so local/test-gate behavior matches the migrated suite.
 - Final verification:
   - `npx vitest run` (final pass): **8 test files**, **150 tests passed**, **0 failed**.
