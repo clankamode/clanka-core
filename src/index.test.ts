@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { diffRuns, formatDiffMarkdown } from './diff';
 import type { CognitiveEvent } from './runtime/kernel';
