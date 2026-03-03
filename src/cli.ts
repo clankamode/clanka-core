@@ -64,7 +64,7 @@ async function cmdLog(runId: string, type: string, payloadJson: string) {
   console.log(`${runId} ${count}`);
 }
 
-function cmdReplay(runId: string) {
+export function cmdReplay(runId: string, writeLine: (line: string) => void = console.log) {
   const kernel = loadRun(runId);
   const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
   const firstTimestamp = events[0]?.timestamp ?? 0;
@@ -72,7 +72,7 @@ function cmdReplay(runId: string) {
   for (const event of events) {
     const deltaMs = event.timestamp - firstTimestamp;
     const payloadPreview = JSON.stringify(event.payload).slice(0, 80);
-    console.log(`+${deltaMs}ms  [${event.seq}]  ${event.type}  ${payloadPreview}`);
+    writeLine(`+${deltaMs}ms  [${event.seq}]  ${event.type}  ${payloadPreview}`);
   }
 }
 
@@ -197,8 +197,10 @@ async function main() {
   process.exit(2);
 }
 
-main().catch(error => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(1);
-});
+if (process.env.CLANKA_CORE_CLI_TEST !== '1') {
+  main().catch(error => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  });
+}

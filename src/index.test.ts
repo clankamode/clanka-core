@@ -1,7 +1,10 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { diffRuns, formatDiffMarkdown } from './diff';
-import type { CognitiveEvent } from './runtime/kernel';
+import { ClankaKernel, type CognitiveEvent } from './runtime/kernel';
 
 function makeEvent(overrides: Partial<CognitiveEvent> & { seq: number; type: string }): CognitiveEvent {
   return {
@@ -164,4 +167,52 @@ test('formatDiffMarkdown truncates long payload summaries', () => {
   assert.ok(outputLine, 'expected tool.output line');
   assert.ok(outputLine.endsWith('...'), 'expected truncated summary to end with ellipsis');
   assert.ok(!md.includes('x'.repeat(120)), 'expected long payload to be truncated');
+});
+
+test('cmdReplay prints relative timestamps with +0ms first line in seq order', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-replay-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
+
+    const runId = 'replay-seq-check';
+    const kernel = new ClankaKernel(runId);
+    await kernel.log('run.start', 'test', { step: 0 });
+
+    vi.setSystemTime(new Date('2026-03-01T00:00:00.007Z'));
+    await kernel.log('run.step', 'test', { step: 1 });
+
+    vi.setSystemTime(new Date('2026-03-01T00:00:00.015Z'));
+    await kernel.log('run.end', 'test', { step: 2 });
+
+    fs.writeFileSync(path.join(tempRoot, 'runs', `${runId}.jsonl`), kernel.serialize() + '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    const { cmdReplay } = await import('./cli');
+    const lines: string[] = [];
+    cmdReplay(runId, line => lines.push(line));
+
+    assert.equal(lines.length, 3);
+    assert.match(lines[0], /^\+0ms  \[0\]  run.start  /);
+    assert.deepEqual(
+      lines.map(line => Number(line.match(/\[(\d+)\]/)?.[1] ?? '-1')),
+      [0, 1, 2],
+    );
+    assert.match(lines[2], /^\+15ms  \[2\]  run.end  /);
+  } finally {
+    vi.useRealTimers();
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
 });

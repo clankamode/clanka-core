@@ -161,7 +161,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
     npx vitest run
     # exits 0, replay tests appear in output as passing
 
-**Status:** pending
+**Status:** done
 
 ---
 
@@ -169,8 +169,8 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 
 - [x] Milestone 1: test suite fixed (npx vitest run exits 0)
 - [x] Milestone 2: replay command implemented and smoke-tested
-- [ ] Milestone 3: replay tests added, TASKS.md updated
-- [ ] All acceptance criteria passing
+- [x] Milestone 3: replay tests added, TASKS.md updated
+- [x] All acceptance criteria passing
 - [ ] Outcomes & Retrospective written
 
 ---
@@ -186,6 +186,9 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
   Evidence:
   - `+0ms  [0]  run.start  {}`
   - `+0ms  [1]  run.commit  {}`
+- `src/cli.ts` executes `main()` at module load, which blocks direct unit testing unless command execution is gated in test mode.
+  Evidence:
+  - replay tests require importing `cmdReplay` without triggering CLI argument parsing and `process.exit()`.
 
 ---
 
@@ -193,6 +196,7 @@ Commit: `test(cli): add replay command tests; update TASKS.md`
 
 - Milestone 1 course correction: after converting test imports from `node:test` to `vitest`, added explicit vitest discovery config to exclude `dist/**` because stale compiled test files caused false failures. This kept the migration scoped and preserved all 149 test assertions.
 - Milestone 2 implementation choice: used existing `loadRun()` + `getHistory()` in `src/cli.ts` instead of `ReplayHarness`, because CLI replay only needs persisted event playback and timestamp delta formatting; kernel history already preserves persisted run ordering and data.
+- Milestone 3 testability adjustment: exported `cmdReplay()` and gated `main()` behind `CLANKA_CORE_CLI_TEST=1` during tests so vitest can import command logic directly without subprocess overhead.
 
 ---
 
