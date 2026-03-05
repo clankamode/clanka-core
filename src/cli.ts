@@ -15,7 +15,7 @@ function usage() {
   console.log('  replay <runId>');
   console.log('  verify <runId>');
   console.log('  ls');
-  console.log('  export <runId>');
+  console.log('  export <runId> [--format json|markdown]');
   console.log('  diff <runId1> <runId2> [--json]');
 }
 
@@ -126,12 +126,28 @@ function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
   }
 }
 
-function cmdExport(runId: string) {
-  const filePath = runPath(runId);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Run not found: ${runId}`);
+function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
+  const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
+  const lines = [`# Run Export: ${runId}`, '', `Total events: ${events.length}`, ''];
+
+  for (const event of events) {
+    lines.push(`- [${event.seq}] ${event.type} @ ${new Date(event.timestamp).toISOString()}`);
+    lines.push(`  - actor: ${event.actor}`);
+    lines.push(`  - payload: ${JSON.stringify(event.payload)}`);
   }
-  process.stdout.write(fs.readFileSync(filePath, 'utf-8'));
+
+  return lines.join('\n') + '\n';
+}
+
+export function cmdExport(runId: string, format: 'json' | 'markdown' = 'json') {
+  const kernel = loadRun(runId);
+
+  if (format === 'markdown') {
+    process.stdout.write(formatExportMarkdown(runId, kernel));
+    return;
+  }
+
+  process.stdout.write(JSON.stringify(kernel.getHistory(), null, 2) + '\n');
 }
 
 async function main() {
@@ -180,7 +196,18 @@ async function main() {
   if (command === 'export') {
     const runId = args[0];
     if (!runId) throw new Error('export requires <runId>');
-    cmdExport(runId);
+
+    const formatFlag = args.find(arg => arg.startsWith('--format='));
+    const formatValue = formatFlag ? formatFlag.split('=')[1] : undefined;
+    const formatIndex = args.indexOf('--format');
+    const formatArg = formatIndex >= 0 ? args[formatIndex + 1] : undefined;
+    const requestedFormat = (formatValue ?? formatArg ?? 'json') as 'json' | 'markdown';
+
+    if (requestedFormat !== 'json' && requestedFormat !== 'markdown') {
+      throw new Error('export --format must be one of: json, markdown');
+    }
+
+    cmdExport(runId, requestedFormat);
     return;
   }
 
