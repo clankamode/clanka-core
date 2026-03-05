@@ -43,3 +43,8 @@ From `packages/core/index.ts`:
 
 Key class:
 - `ClankaKernel` (`packages/core/kernel.ts`) for event logging + invariant checks
+
+## NPM publish readiness scaffold
+- Root package metadata is prepared for `@clankamode/core` with `publishConfig.access=public`.
+- CI scaffold is in `.github/workflows/publish.yml` and runs build/test/pack in dry-run mode.
+- Actual publish remains opt-in via manual workflow dispatch input: `run_publish=true`.

@@ -1,6 +1,17 @@
+# Source and tests
 src/
 tests/
 **/*.test.ts
+
+# Project/task/docs not needed in package tarball
 TASKS.md
 *.md
 !README.md
+
+# Tooling and local artifacts
+.github/
+.githooks/
+runs/
+blobs/
+node_modules/
+*.log
