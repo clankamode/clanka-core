@@ -4,7 +4,7 @@
 ## 🔴 High Priority
 - [x] **Expand test coverage for `runtime/`** — add tests for: event ordering invariants, replay determinism, invalid event payloads (zod rejection), concurrent run isolation
 - [x] **Document the event schema** — ensure `CONTRACT.md` covers every event type with required/optional fields and example payloads
-- [ ] **Publish to npm as `@clankamode/core`** — add `"publishConfig": { "access": "public" }`, CI publish job, `.npmignore`
+- [x] **Publish to npm as `@clankamode/core`** — add `"publishConfig": { "access": "public" }`, CI publish job, `.npmignore` (completed 2026-03-05)
 
 ## 🟡 Medium Priority
 - [x] **`diff.ts` — add tests** — write tests for: added/removed/modified lines, binary file handling, large diff truncation

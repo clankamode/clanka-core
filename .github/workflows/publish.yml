@@ -1,11 +1,13 @@
 name: Publish NPM Package
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - package.json
+      - .github/workflows/publish.yml
 
 jobs:
   publish:
@@ -48,7 +50,11 @@ jobs:
         run: npm ci
 
       - name: Publish to npm
-        if: steps.version_check.outputs.changed == 'true'
-        run: npm publish --access public
+        if: steps.version_check.outputs.changed == 'true' && secrets.NPM_TOKEN != ''
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip publish (no NPM_TOKEN)
+        if: steps.version_check.outputs.changed == 'true' && secrets.NPM_TOKEN == ''
+        run: echo "NPM_TOKEN is not configured; skipping publish."
