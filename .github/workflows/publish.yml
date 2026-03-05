@@ -2,10 +2,12 @@ name: Publish NPM Package
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - package.json
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -16,39 +18,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect version change
-        id: version_check
-        run: |
-          if ! git cat-file -e HEAD^ 2>/dev/null; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          prev_version="$(git show HEAD^:package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version);")"
-          curr_version="$(node -e "process.stdout.write(require('./package.json').version)")"
-
-          if [ "$prev_version" = "$curr_version" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Setup Node 24
-        if: steps.version_check.outputs.changed == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
-        if: steps.version_check.outputs.changed == 'true'
         run: npm ci
 
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
       - name: Publish to npm
-        if: steps.version_check.outputs.changed == 'true'
-        run: npm publish --access public
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
