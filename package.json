@@ -1,19 +1,14 @@
 {
-  "name": "@clankamode/core",
+  "name": "@clankamode/core-monorepo",
+  "private": true,
   "version": "1.0.0",
   "description": "",
   "main": "dist/runtime/kernel.js",
   "types": "dist/runtime/kernel.d.ts",
-  "files": [
-    "dist",
-    "README.md"
+  "workspaces": [
+    "packages/core-runtime",
+    "packages/core-cli"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "bin": {
-    "clanka-core": "dist/cli.js"
-  },
   "directories": {
     "example": "examples"
   },

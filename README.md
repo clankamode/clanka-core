@@ -2,6 +2,10 @@
 
 `clanka-core` is the runtime/event kernel for Clanka agent execution traces. It records canonicalized events, verifies invariants, and supports deterministic replay/inspection workflows through both a CLI and reusable core modules.
 
+## Packages
+- `@clankamode/core-runtime` — runtime/event kernel library
+- `@clankamode/core-cli` — CLI entrypoint (`clanka-core`)
+
 ## Stack
 - TypeScript
 - Node.js

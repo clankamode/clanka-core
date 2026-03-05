@@ -1,0 +1,14 @@
+{
+  "name": "@clankamode/core-runtime",
+  "version": "1.0.0",
+  "description": "Runtime/event kernel for clanka-core",
+  "main": "../../dist/runtime/kernel.js",
+  "types": "../../dist/runtime/kernel.d.ts",
+  "files": [
+    "../../dist/runtime"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "ISC"
+}
