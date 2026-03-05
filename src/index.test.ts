@@ -216,3 +216,81 @@ test('cmdReplay prints relative timestamps with +0ms first line in seq order', a
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('cmdExport emits JSON by default', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-export-json-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+
+    const runId = 'export-json';
+    const kernel = new ClankaKernel(runId);
+    await kernel.log('run.start', 'test', { ok: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', `${runId}.jsonl`), kernel.serialize() + '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdExport } = await import('./cli');
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    cmdExport(runId);
+
+    const output = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    const parsed = JSON.parse(output);
+    assert.equal(Array.isArray(parsed), true);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].type, 'run.start');
+
+    writeSpy.mockRestore();
+  } finally {
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdExport emits markdown with event details', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-export-md-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+
+    const runId = 'export-markdown';
+    const kernel = new ClankaKernel(runId);
+    await kernel.log('run.start', 'test', { phase: 'init' });
+    fs.writeFileSync(path.join(tempRoot, 'runs', `${runId}.jsonl`), kernel.serialize() + '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdExport } = await import('./cli');
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    cmdExport(runId, 'markdown');
+
+    const output = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    assert.match(output, /^# Run Export: export-markdown/m);
+    assert.match(output, /Total events: 1/);
+    assert.match(output, /run.start/);
+    assert.match(output, /payload: {"phase":"init"}/);
+
+    writeSpy.mockRestore();
+  } finally {
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
