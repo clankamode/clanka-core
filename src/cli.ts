@@ -132,7 +132,7 @@ function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
 
   for (const event of events) {
     lines.push(`- [${event.seq}] ${event.type} @ ${new Date(event.timestamp).toISOString()}`);
-    lines.push(`  - actor: ${event.actor}`);
+    lines.push(`  - actor: ${event.meta?.agentId ?? ''}`);
     lines.push(`  - payload: ${JSON.stringify(event.payload)}`);
   }
 
