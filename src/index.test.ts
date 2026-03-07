@@ -281,6 +281,7 @@ test('cmdExport emits markdown with event details', async () => {
     assert.match(output, /^# Run Export: export-markdown/m);
     assert.match(output, /Total events: 1/);
     assert.match(output, /run.start/);
+    assert.match(output, /actor: test/);
     assert.match(output, /payload: {"phase":"init"}/);
 
     writeSpy.mockRestore();

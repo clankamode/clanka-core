@@ -92,6 +92,15 @@ function compareEvents(e1: CognitiveEvent, e2: CognitiveEvent): FieldDiff[] {
   return diffs;
 }
 
+/**
+ * Compares two event sequences and groups differences by missing and modified events.
+ *
+ * @param runId1 - Identifier for the first run.
+ * @param events1 - Events from the first run keyed by sequence number.
+ * @param runId2 - Identifier for the second run.
+ * @param events2 - Events from the second run keyed by sequence number.
+ * @returns A structured summary of events that were added, removed, or modified.
+ */
 export function diffRuns(
   runId1: string,
   events1: CognitiveEvent[],
@@ -222,6 +231,14 @@ function renderWithContext(changes: LineChange[], contextLines: number): string[
   return rendered;
 }
 
+/**
+ * Produces a contextual line-by-line diff between two string inputs.
+ *
+ * @param before - Original text or list of lines.
+ * @param after - Updated text or list of lines.
+ * @param options - Diff rendering options such as surrounding context lines.
+ * @returns Rendered diff lines prefixed with `+`, `-`, or a space for context.
+ */
 export function diffLines(
   before: string | string[],
   after: string | string[],
@@ -234,6 +251,14 @@ export function diffLines(
   return renderWithContext(changes, contextLines);
 }
 
+/**
+ * Limits a rendered diff to a maximum number of lines.
+ *
+ * @param lines - Rendered diff lines.
+ * @param maxLines - Maximum number of lines to keep.
+ * @param truncationMarker - Marker appended when lines are omitted.
+ * @returns The original lines when they fit, otherwise a truncated copy.
+ */
 export function truncateDiffLines(
   lines: string[],
   maxLines: number,
@@ -248,6 +273,15 @@ export function truncateDiffLines(
   return [...lines.slice(0, maxLines - 1), truncationMarker];
 }
 
+/**
+ * Generates a formatted line diff string with optional truncation and injected helpers.
+ *
+ * @param before - Original text or list of lines.
+ * @param after - Updated text or list of lines.
+ * @param options - Diff rendering and truncation options.
+ * @param deps - Optional formatting dependencies for testing or customization.
+ * @returns A newline-joined diff string, or an empty string when there are no changes.
+ */
 export function formatLineDiff(
   before: string | string[],
   after: string | string[],
@@ -269,11 +303,24 @@ export function formatLineDiff(
   return joinLines(lines);
 }
 
+/**
+ * Serializes a payload to JSON and shortens it for compact display.
+ *
+ * @param payload - Value to serialize.
+ * @param maxLength - Maximum output length including the ellipsis.
+ * @returns A JSON string representation, truncated when necessary.
+ */
 export function summarizePayload(payload: unknown, maxLength = 80): string {
   const s = JSON.stringify(payload);
   return s.length > maxLength ? s.slice(0, maxLength - 3) + '...' : s;
 }
 
+/**
+ * Formats a run diff summary as Markdown.
+ *
+ * @param diff - Structured diff data returned by {@link diffRuns}.
+ * @returns Markdown describing added, removed, and modified events.
+ */
 export function formatDiffMarkdown(diff: RunDiffResult): string {
   const lines: string[] = [];
   lines.push(`## Run Diff: ${diff.runId1} vs ${diff.runId2}`);
