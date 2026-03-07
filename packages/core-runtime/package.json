@@ -1,0 +1,21 @@
+{
+  "name": "@clankamode/core-runtime",
+  "version": "1.0.0",
+  "description": "Runtime/event kernel for clanka-core",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

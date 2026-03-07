@@ -2,8 +2,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ClankaKernel } from './runtime/kernel.js';
-import { diffRuns, formatDiffMarkdown } from './diff.js';
+import { ClankaKernel, diffRuns, formatDiffMarkdown } from '@clankamode/core-runtime';
 
 const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 
