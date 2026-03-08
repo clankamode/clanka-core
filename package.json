@@ -11,6 +11,10 @@
   "publishConfig": {
     "access": "public"
   },
+  "workspaces": [
+    "packages/core-runtime",
+    "packages/core-cli"
+  ],
   "bin": {
     "clanka-core": "dist/cli.js"
   },
@@ -18,10 +22,11 @@
     "example": "examples"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && npm run build -w @clankamode/core-runtime && npm run build -w @clankamode/core-cli",
     "test": "npx vitest run",
+    "test:packages": "npm run test -w @clankamode/core-runtime && npm run test -w @clankamode/core-cli",
     "prepare": "git config core.hooksPath .githooks",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test && npm run test:packages"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,24 @@
+{
+  "name": "@clankamode/core-cli",
+  "version": "1.0.0",
+  "description": "CLI for clanka-core",
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "clanka-core": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clankamode/core-runtime": "file:../core-runtime"
+  }
+}
