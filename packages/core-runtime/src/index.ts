@@ -22,3 +22,10 @@ export type {
   FormatLineDiffOptions,
   FormatLineDiffDeps,
 } from './diff.js';
+
+export { retry } from './retry.js';
+export type {
+  RetryJitterOptions,
+  RetryOperation,
+  RetryOptions,
+} from './retry.js';
