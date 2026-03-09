@@ -32,3 +32,13 @@ export { ClankaKernel } from './kernel.js';
 export type { KernelConfig } from './kernel.js';
 
 export { verifyRun } from './verify.js';
+
+export { createLogger } from './structured-logger.js';
+export type {
+  LoggerContext,
+  LogLevel,
+  LogOutput,
+  StructuredLogEntry,
+  StructuredLogger,
+  StructuredLoggerOptions,
+} from './structured-logger.js';
