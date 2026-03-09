@@ -19,6 +19,16 @@ export type {
 export { EventLogger } from './logger.js';
 export type { LoggerConfig } from './logger.js';
 
+export { createLogger } from './structured-logger.js';
+export type {
+  LoggerContext,
+  LogLevel,
+  LogOutput,
+  StructuredLogEntry,
+  StructuredLogger,
+  StructuredLoggerOptions,
+} from './structured-logger.js';
+
 export { SchemaRegistry, EventEnvelopeSchema } from './schema-registry.js';
 export type { EventEnvelope } from './schema-registry.js';
 

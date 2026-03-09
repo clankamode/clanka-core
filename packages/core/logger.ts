@@ -1,7 +1,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Writable } from 'node:stream';
+import type { LogLevel } from './structured-logger.js';
 import { EventSchema, type Event } from './event';
+export { createLogger } from './structured-logger.js';
+export type {
+  LoggerContext,
+  LogLevel,
+  LogOutput,
+  StructuredLogEntry,
+  StructuredLogger,
+  StructuredLoggerOptions,
+} from './structured-logger.js';
 
 /**
  * EventLogger: Append-only JSONL with blob storage for large payloads.
@@ -15,8 +25,6 @@ export interface LoggerConfig {
   cliArgs?: string[];
   structuredOutput?: boolean;
 }
-
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export class EventLogger {
   private runId: string;

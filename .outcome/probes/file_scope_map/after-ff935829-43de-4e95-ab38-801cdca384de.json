@@ -1,0 +1,7 @@
+{
+  "files": [
+    "packages/core/index.ts",
+    "packages/core/logger.ts"
+  ],
+  "count": 2
+}
