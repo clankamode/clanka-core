@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { ClankaKernel, diffRuns } from './index.js';
+import { ClankaKernel, diffRuns, retry } from './index.js';
 
 test('core-runtime exports kernel + diff utils', async () => {
   const kernel = new ClankaKernel('pkg-runtime-smoke');
@@ -10,4 +10,6 @@ test('core-runtime exports kernel + diff utils', async () => {
 
   assert.equal(history.length, 1);
   assert.equal(diff.modified.length, 0);
+  const retried = await retry(() => 'ok', { maxRetries: 0 });
+  assert.equal(retried, 'ok');
 });
