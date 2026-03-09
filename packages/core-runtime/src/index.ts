@@ -6,6 +6,9 @@ export type {
   VerifyResult,
 } from './runtime/kernel.js';
 
+export { ConfigValidationError, loadConfig, parseEnvFile } from './config.js';
+export type { ConfigValidationIssue, LoadConfigOptions } from './config.js';
+
 export {
   diffRuns,
   formatDiffMarkdown,

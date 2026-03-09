@@ -3,6 +3,10 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@clankamode/core-runtime": ["packages/core-runtime/src/index.ts"]
+    },
     "declaration": false,
     "outDir": "./dist",
     "rootDir": ".",
