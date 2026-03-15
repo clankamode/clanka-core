@@ -28,9 +28,11 @@ npx clanka-core <command>
 ## CLI Commands
 - `run <runId>` - create a run and emit start/commit events
 - `log <runId> <type> <payload-json>` - append one event
+- `replay <runId>` - replay a recorded run with event stream and relative timestamps
 - `verify <runId>` - verify run integrity/invariants
 - `ls` - list stored runs with status
-- `export <runId>` - print raw run JSONL
+- `export <runId> [--format json|markdown]` - print raw run JSONL or markdown
+- `diff <runId1> <runId2> [--json]` - diff two runs (markdown or JSON output)
 
 Runs are stored in `runs/<runId>.jsonl`.
 
