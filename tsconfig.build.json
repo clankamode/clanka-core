@@ -7,5 +7,9 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.vitest.test.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.vitest.test.ts",
+    "src/runtime/kernel-test-helpers.ts"
+  ]
 }
