@@ -6,20 +6,28 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 test('replay: identical inputs produce identical event ids', async () => {
-  const k1 = new ClankaKernel('run-det');
-  const k2 = new ClankaKernel('run-det');
+  const originalNow = Date.now;
+  const fixedNow = 1700000003000;
+  (Date as unknown as { now: () => number }).now = () => fixedNow;
 
-  await k1.log('run.start', 'agent', { input: 'hello' });
-  await k1.log('tool.call', 'agent', { tool: 'bash', cmd: 'ls' });
+  try {
+    const k1 = new ClankaKernel('run-det');
+    const k2 = new ClankaKernel('run-det');
 
-  await k2.log('run.start', 'agent', { input: 'hello' });
-  await k2.log('tool.call', 'agent', { tool: 'bash', cmd: 'ls' });
+    await k1.log('run.start', 'agent', { input: 'hello' });
+    await k1.log('tool.call', 'agent', { tool: 'bash', cmd: 'ls' });
 
-  const h1 = k1.getHistory();
-  const h2 = k2.getHistory();
-  assert.equal(h1.length, h2.length);
-  for (let i = 0; i < h1.length; i++) {
-    assert.equal(h1[i].id, h2[i].id, `event ${i} id must match`);
+    await k2.log('run.start', 'agent', { input: 'hello' });
+    await k2.log('tool.call', 'agent', { tool: 'bash', cmd: 'ls' });
+
+    const h1 = k1.getHistory();
+    const h2 = k2.getHistory();
+    assert.equal(h1.length, h2.length);
+    for (let i = 0; i < h1.length; i++) {
+      assert.equal(h1[i].id, h2[i].id, `event ${i} id must match`);
+    }
+  } finally {
+    (Date as unknown as { now: () => number }).now = originalNow;
   }
 });
 
