@@ -1,7 +1,7 @@
 {
   "name": "@clankamode/core",
   "version": "1.0.0",
-  "description": "",
+  "description": "Runtime/event kernel and CLI for Clanka agent execution traces",
   "main": "dist/runtime/kernel.js",
   "types": "dist/runtime/kernel.d.ts",
   "files": [
@@ -18,9 +18,6 @@
   "bin": {
     "clanka-core": "dist/cli.js"
   },
-  "directories": {
-    "example": "examples"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && npm run build -w @clankamode/core-runtime && npm run build -w @clankamode/core-cli",
     "test": "npx vitest run",
@@ -28,7 +25,13 @@
     "prepare": "git config core.hooksPath .githooks",
     "prepublishOnly": "npm run build && npm test && npm run test:packages"
   },
-  "keywords": [],
+  "keywords": [
+    "clanka",
+    "agent",
+    "event-log",
+    "replay",
+    "cli"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
