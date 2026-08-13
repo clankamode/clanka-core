@@ -16,4 +16,4 @@ clanka-core diff <runId1> <runId2> [--json]
 ## Operator notes
 - Runs are stored as JSONL under `runs/<runId>.jsonl`.
 - `export` (default `--format json`) prints a pretty-printed JSON **array** of events, not the raw JSONL file contents.
-- `ls` lists local runs with verify status; an empty `runs/` directory means there is nothing to list yet.
+- `ls` lists local runs with verify status (`PASS` / `FAIL`).
