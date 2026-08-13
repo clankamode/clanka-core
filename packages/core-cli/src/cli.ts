@@ -6,16 +6,21 @@ import { ClankaKernel, diffRuns, formatDiffMarkdown } from '@clankamode/core-run
 
 const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 
-function usage() {
-  console.log('Usage: clanka-core <command> [args]');
-  console.log('Commands:');
-  console.log('  run <runId>');
-  console.log('  log <runId> <type> <payload-json>');
-  console.log('  replay <runId>');
-  console.log('  verify <runId>');
-  console.log('  ls');
-  console.log('  export <runId> [--format json|markdown]');
-  console.log('  diff <runId1> <runId2> [--json]');
+export function usage(writeLine: (line: string) => void = console.log) {
+  writeLine('Usage: clanka-core <command> [args]');
+  writeLine('Commands:');
+  writeLine('  run <runId>');
+  writeLine('  log <runId> <type> <payload-json>');
+  writeLine('  replay <runId>');
+  writeLine('  verify <runId>');
+  writeLine('  ls');
+  writeLine('  export <runId> [--format json|markdown]');
+  writeLine('  diff <runId1> <runId2> [--json]');
+  writeLine('  help | --help | -h');
+}
+
+export function isHelpCommand(command: string | undefined): boolean {
+  return command === 'help' || command === '--help' || command === '-h';
 }
 
 function runPath(runId: string): string {
@@ -82,14 +87,22 @@ function cmdVerify(runId: string) {
     console.log(`PASS ${runId} ${result.eventCount}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`FAIL ${runId} ${message}`);
+    console.error(`FAIL ${runId} ${message}`);
     process.exitCode = 1;
   }
 }
 
-function cmdLs() {
+export function cmdLs(
+  writeLine: (line: string) => void = console.log,
+  writeError: (line: string) => void = console.error,
+) {
   ensureRunsDir();
   const files = fs.readdirSync(RUNS_DIR).filter(name => name.endsWith('.jsonl')).sort();
+
+  if (files.length === 0) {
+    writeError('No runs found in runs/');
+    return;
+  }
 
   for (const file of files) {
     const runId = file.slice(0, -'.jsonl'.length);
@@ -102,14 +115,15 @@ function cmdLs() {
 
       try {
         kernel.verify();
-      } catch {
-        status = 'FAIL';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        status = `FAIL (${message})`;
       }
 
-      console.log(`${runId}\t${eventCount}\t${lastTs}\t${status}`);
+      writeLine(`${runId}\t${eventCount}\t${lastTs}\t${status}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`${runId}\t0\t0\tFAIL (${message})`);
+      writeLine(`${runId}\t0\t0\tFAIL (${message})`);
     }
   }
 }
@@ -155,6 +169,11 @@ async function main() {
   if (!command) {
     usage();
     process.exit(2);
+  }
+
+  if (isHelpCommand(command)) {
+    usage();
+    process.exit(0);
   }
 
   if (command === 'run') {
