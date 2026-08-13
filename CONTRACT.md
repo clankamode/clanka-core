@@ -2,6 +2,8 @@
 
 This document covers event contracts used by exported runtime modules in this repository.
 
+> **Operator note:** The CLI/`ClankaKernel` path emits `run.start`, while the EventLog schema below enumerates `run.started`. These are not the same label today. See `docs/event-schema.md` (“Naming note: `run.start` vs `run.started`”).
+
 # EventLog
 
 Source: `packages/core/event.ts` + `packages/core/logger.ts`.

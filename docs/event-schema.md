@@ -33,6 +33,18 @@ This combination makes the log suitable for replay, verification, auditing, and 
 | `invariant.failed` | When an invariant check detects a policy or consistency violation. |
 | `budget.exhausted` | When execution stops because a resource budget is consumed. |
 
+### Naming note: `run.start` vs `run.started`
+
+Do not assume these are interchangeable.
+
+| Surface | Startup event type | Notes |
+| --- | --- | --- |
+| CLI + `ClankaKernel` (`src/runtime/kernel.ts`, `@clankamode/core-runtime`) | `run.start` | `clanka-core run` emits `run.start` then `run.commit`. Kernel `type` is an open string. |
+| EventLog schema (`packages/core/event.ts`) | `run.started` | Enumerated by `EventTypeSchema` / `CONTRACT.md`. |
+| Sample traces in `runs/` | may use either | e.g. `golden.jsonl` uses `run.started`; CLI-created runs use `run.start`. |
+
+Operators comparing CLI output, golden fixtures, and schema docs should treat `run.start` and `run.started` as distinct labels until a migration unifies them.
+
 ## Event Envelope
 
 `EventSchema` defines this structure:
