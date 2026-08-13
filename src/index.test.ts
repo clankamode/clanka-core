@@ -398,3 +398,38 @@ test('cmdExport emits markdown with event details', async () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('cmdRun refuses to overwrite an existing run without --force', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-run-overwrite-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdRun } = await import('./cli');
+
+    const lines: string[] = [];
+    await cmdRun('demo', {}, line => lines.push(line));
+    assert.equal(lines[0], 'demo 2');
+    assert.equal(fs.existsSync(path.join(tempRoot, 'runs', 'demo.jsonl')), true);
+
+    await assert.rejects(
+      () => cmdRun('demo'),
+      /Run already exists: demo\. Re-run with --force to overwrite\./,
+    );
+
+    const forced: string[] = [];
+    await cmdRun('demo', { force: true }, line => forced.push(line));
+    assert.equal(forced[0], 'demo 2');
+  } finally {
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
