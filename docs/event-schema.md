@@ -21,6 +21,18 @@ This combination makes the log suitable for replay, verification, auditing, and 
 | `run.started` | When a run begins and the runtime wants to record run-level startup metadata. |
 | `run.finished` | When a run completes and the runtime records its terminal status. |
 | `run.commit` | When a run reaches a committed checkpoint or persisted milestone. |
+
+### Naming note: `run.start` vs `run.started`
+
+Do not assume these are interchangeable.
+
+| Surface | Startup event type | Notes |
+| --- | --- | --- |
+| CLI + `ClankaKernel` (`src/runtime/kernel.ts`, `@clankamode/core-runtime`) | `run.start` | `clanka-core run` emits `run.start` then `run.commit`. Kernel `type` is an open string. |
+| EventLog schema (`packages/core/event.ts`) | `run.started` | Enumerated by `EventTypeSchema` / `CONTRACT.md`. |
+| Sample traces in `runs/` | may use either | e.g. `golden.jsonl` uses `run.started`; CLI-created runs use `run.start`. |
+
+Operators comparing CLI output, golden fixtures, and schema docs should treat `run.start` and `run.started` as distinct labels until a migration unifies them.
 | `agent.started` | When an agent begins work inside a run. |
 | `agent.finished` | When an agent completes its work inside a run. |
 | `model.requested` | When the runtime issues a model request. |
