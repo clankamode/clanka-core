@@ -17,6 +17,7 @@
 - [x] **`test-ls.ts` / `gen-golden.ts` cleanup** — remove superseded scratch scripts
 
 ## 🧠 Notes
-- CLI: `node dist/cli.js <command>` — commands: `run`, `log`
+- CLI: `node dist/cli.js <command>` — commands: `run`, `log`, `replay`, `verify`, `ls`, `export`, `diff`
+- `export` defaults to pretty-printed JSON event arrays (not raw JSONL reprint)
 - `src/runtime/` — core event runtime, `src/diff.ts` — diff utilities
-- `blobs/`, `runs/` store recorded run artifacts
+- `runs/` stores recorded run artifacts as `<runId>.jsonl`
