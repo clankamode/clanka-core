@@ -21,6 +21,17 @@ This combination makes the log suitable for replay, verification, auditing, and 
 | `run.started` | When a run begins and the runtime wants to record run-level startup metadata. |
 | `run.finished` | When a run completes and the runtime records its terminal status. |
 | `run.commit` | When a run reaches a committed checkpoint or persisted milestone. |
+| `agent.started` | When an agent begins work inside a run. |
+| `agent.finished` | When an agent completes its work inside a run. |
+| `model.requested` | When the runtime issues a model request. |
+| `model.responded` | When a model response is received and logged. |
+| `tool.requested` | When the runtime requests execution of a tool call. |
+| `tool.responded` | When a tool call finishes and its result is logged. |
+| `fs.snapshot` | When the runtime records a filesystem snapshot, typically after a write transaction. |
+| `fs.diff` | When the runtime records a file mutation between two digests. |
+| `decision.made` | When an agent records a deliberate planning or reasoning step that justifies later actions. |
+| `invariant.failed` | When an invariant check detects a policy or consistency violation. |
+| `budget.exhausted` | When execution stops because a resource budget is consumed. |
 
 ### Naming note: `run.start` vs `run.started`
 
@@ -33,17 +44,6 @@ Do not assume these are interchangeable.
 | Sample traces in `runs/` | may use either | e.g. `golden.jsonl` uses `run.started`; CLI-created runs use `run.start`. |
 
 Operators comparing CLI output, golden fixtures, and schema docs should treat `run.start` and `run.started` as distinct labels until a migration unifies them.
-| `agent.started` | When an agent begins work inside a run. |
-| `agent.finished` | When an agent completes its work inside a run. |
-| `model.requested` | When the runtime issues a model request. |
-| `model.responded` | When a model response is received and logged. |
-| `tool.requested` | When the runtime requests execution of a tool call. |
-| `tool.responded` | When a tool call finishes and its result is logged. |
-| `fs.snapshot` | When the runtime records a filesystem snapshot, typically after a write transaction. |
-| `fs.diff` | When the runtime records a file mutation between two digests. |
-| `decision.made` | When an agent records a deliberate planning or reasoning step that justifies later actions. |
-| `invariant.failed` | When an invariant check detects a policy or consistency violation. |
-| `budget.exhausted` | When execution stops because a resource budget is consumed. |
 
 ## Event Envelope
 
