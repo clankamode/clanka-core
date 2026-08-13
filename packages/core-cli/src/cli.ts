@@ -9,7 +9,7 @@ const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('Usage: clanka-core <command> [args]');
   writeLine('Commands:');
-  writeLine('  run <runId>');
+  writeLine('  run <runId> [--force]');
   writeLine('  log <runId> <type> <payload-json>');
   writeLine('  replay <runId>');
   writeLine('  verify <runId>');
@@ -44,12 +44,22 @@ function loadRun(runId: string): ClankaKernel {
   return ClankaKernel.loadFromFile(runId, RUNS_DIR);
 }
 
-async function cmdRun(runId: string) {
+export async function cmdRun(
+  runId: string,
+  options: { force?: boolean } = {},
+  writeLine: (line: string) => void = console.log,
+) {
+  if (!options.force && fs.existsSync(runPath(runId))) {
+    throw new Error(
+      `Run already exists: ${runId}. Re-run with --force to overwrite.`,
+    );
+  }
+
   const kernel = new ClankaKernel(runId);
   const start = await kernel.log('run.start', 'cli', {}, []);
   await kernel.log('run.commit', 'cli', {}, [start.id]);
   saveRun(runId, kernel);
-  console.log(`${runId} ${kernel.getHistory().length}`);
+  writeLine(`${runId} ${kernel.getHistory().length}`);
 }
 
 async function cmdLog(runId: string, type: string, payloadJson: string) {
@@ -177,9 +187,14 @@ async function main() {
   }
 
   if (command === 'run') {
-    const runId = args[0];
+    const force = args.includes('--force');
+    const positional = args.filter(arg => arg !== '--force');
+    const runId = positional[0];
     if (!runId) throw new Error('run requires <runId>');
-    await cmdRun(runId);
+    if (positional.length > 1) {
+      throw new Error('run accepts only <runId> and optional --force');
+    }
+    await cmdRun(runId, { force });
     return;
   }
 
