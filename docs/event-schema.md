@@ -1,6 +1,8 @@
 # Event Schema
 
-The event schema in [`packages/core/event.ts`](../packages/core/event.ts) defines the immutable event envelope used across `clanka-core`.
+The event schema in [`packages/core/event.ts`](../packages/core/event.ts) defines the EventLog envelope for the in-repo `packages/core` modules (`packages/core` has no `package.json` and is not an npm workspace package).
+
+> **Surfaces:** This document describes `EventTypeSchema` / `EventSchema` in `packages/core/event.ts`. The operator CLI and `ClankaKernel` (`src/runtime/kernel.ts`, `@clankamode/core-runtime`) use an open `string` for `type` and do **not** validate against `EventTypeSchema`. Default `clanka-core run` only appends `run.start` then `run.commit`.
 
 ## Design Overview
 
@@ -14,24 +16,24 @@ This combination makes the log suitable for replay, verification, auditing, and 
 
 ## Event Types
 
-`EventTypeSchema` currently allows these values:
+`EventTypeSchema` currently **allows** these values. The “Intended use” column describes what the EventLog enum means — it is **not** a list of events the CLI emits today.
 
-| Event type | When it is emitted |
+| Event type | Intended use (EventLog schema) |
 | --- | --- |
-| `run.started` | When a run begins and the runtime wants to record run-level startup metadata. |
-| `run.finished` | When a run completes and the runtime records its terminal status. |
-| `run.commit` | When a run reaches a committed checkpoint or persisted milestone. |
-| `agent.started` | When an agent begins work inside a run. |
-| `agent.finished` | When an agent completes its work inside a run. |
-| `model.requested` | When the runtime issues a model request. |
-| `model.responded` | When a model response is received and logged. |
-| `tool.requested` | When the runtime requests execution of a tool call. |
-| `tool.responded` | When a tool call finishes and its result is logged. |
-| `fs.snapshot` | When the runtime records a filesystem snapshot, typically after a write transaction. |
-| `fs.diff` | When the runtime records a file mutation between two digests. |
-| `decision.made` | When an agent records a deliberate planning or reasoning step that justifies later actions. |
-| `invariant.failed` | When an invariant check detects a policy or consistency violation. |
-| `budget.exhausted` | When execution stops because a resource budget is consumed. |
+| `run.started` | Record run-level startup metadata when a run begins. |
+| `run.finished` | Record a run’s terminal status when it completes. |
+| `run.commit` | Record a committed checkpoint or persisted milestone. |
+| `agent.started` | Record that an agent began work inside a run. |
+| `agent.finished` | Record that an agent completed work inside a run. |
+| `model.requested` | Record that a model request was issued. |
+| `model.responded` | Record that a model response was received. |
+| `tool.requested` | Record that a tool call was requested. |
+| `tool.responded` | Record that a tool call finished. |
+| `fs.snapshot` | Record a filesystem snapshot, typically after a write transaction. |
+| `fs.diff` | Record a file mutation between two digests. |
+| `decision.made` | Record a planning/reasoning step that justifies later actions. |
+| `invariant.failed` | Record that an invariant check detected a violation. |
+| `budget.exhausted` | Record that execution stopped because a resource budget was consumed. |
 
 ### Naming note: `run.start` vs `run.started`
 
@@ -105,4 +107,6 @@ Event digests are computed in two steps:
 1. Serialize the event as canonical JSON with sorted keys.
 2. Compute the SHA256 hash of that canonical JSON string.
 
-In `packages/core/event.ts`, this is implemented by `canonicalJSON()` and `contentDigest()`. When optional `meta` is added after event creation, the event is re-digested so `id` still matches the final serialized content.
+In `packages/core/event.ts`, this is implemented by `canonicalJSON()` and `contentDigest()`. `createEvent()` digests before `meta` exists. Separately, `packages/core/kernel.ts` may attach `meta` and re-run `contentDigest()` so `id` matches the final object.
+
+Do not assume EventLog `canonicalJSON()` and CLI/`ClankaKernel` `toCanonical()` (`src/runtime/kernel.ts`) produce identical strings for nested objects — they are different implementations.

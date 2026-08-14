@@ -1,32 +1,30 @@
-# Runbook
+# Runbook (archive)
 
-You are implementing the ExecPlan in docs/PLAN.md for the clanka-core repository.
+> **Archive (completed):** March 2026 runbook for `docs/PLAN.md`.
+> Do **not** treat this as active work. Current status: `TASKS.md`. Vitest suite and CLI `replay` are already in place.
 
-## Source of truth
-docs/PLAN.md is the source of truth. Work milestone by milestone, in order.
-Read the full PLAN.md now before starting any work.
+This file recorded how an agent was instructed to execute the (now finished) replay + vitest exec plan.
 
-## Per-milestone loop
-1. Read the milestone goal and acceptance criteria from PLAN.md
-2. Implement the changes (name exact files and functions as you go)
-3. Run acceptance criteria — if they fail, STOP AND FIX before moving to next milestone
-4. Update PLAN.md:
-   - Milestone status → done
-   - Progress checklist → check off completed items
-   - Surprises & Discoveries → note anything unexpected (with evidence snippets)
-   - Decision Log → record any course corrections with reasoning
-5. Commit with message matching the milestone commit label
+## Source of truth (then)
 
-## Scope discipline
-Keep diffs scoped to the current milestone. Do not expand scope.
-If you notice something broken outside scope, note it in PLAN.md Known Issues (add a section if needed).
+`docs/PLAN.md` was the source of truth for that plan. Milestones there are marked **done**.
 
-## Branch
-Work on branch feat/replay-and-test-fix. Create it if it doesn't exist.
-Never commit to main.
+## Per-milestone loop (then)
 
-## At completion
-Write the Outcomes & Retrospective section in PLAN.md.
-Run `npx vitest run` one final time and include the passing test count in the retrospective.
-EOF
-echo "IMPLEMENT.md written"
+1. Read the milestone goal and acceptance criteria from `PLAN.md`
+2. Implement the changes
+3. Run acceptance criteria before moving on
+4. Update `PLAN.md` status / checklist / surprises / decision log
+5. Commit with the milestone commit label
+
+## Scope discipline (then)
+
+Keep diffs scoped to the then-current milestone. Note out-of-scope breakage in `PLAN.md` Known Issues if needed.
+
+## Branch (then)
+
+Work happened on `feat/replay-and-test-fix`, not on `main`.
+
+## Completion (recorded)
+
+Outcomes & Retrospective were written in `PLAN.md`. Final gate at the time: `npx vitest run` green (see plan retrospective for the then-current count; re-check with `npm test` today).

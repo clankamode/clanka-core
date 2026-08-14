@@ -3,6 +3,8 @@
 This document covers event contracts used by exported runtime modules in this repository.
 
 > **Operator note:** The CLI/`ClankaKernel` path emits `run.start`, while the EventLog schema below enumerates `run.started`. These are not the same label today. See `docs/event-schema.md` (“Naming note: `run.start` vs `run.started`”).
+>
+> `packages/core/` is an in-repo module tree (no `package.json` / not an npm workspace package). Schemas here describe that tree and the separate `src/runtime` / Diff surfaces — not a guarantee that the CLI emits every EventLog type.
 
 # EventLog
 
@@ -261,7 +263,13 @@ The sections in this file explicitly cover all currently defined event enums/uni
 
 Source: `packages/core/replay.ts`.
 
-ReplayHarness consumes `Event[]` from EventLog. It does not introduce stricter payload validation than EventLog; it replays and normalizes deterministic ordering.
+ReplayHarness consumes `Event[]` from EventLog. It does not introduce stricter payload validation than EventLog. Current `replay()` behavior:
+
+- Deduplicates by event `id` (last copy wins), then sorts by `timestamp` / `type` / `seq` / `id`
+- Runs configured invariants against the normalized list
+- Does **not** invoke `ReplayConfig.tools` or `ReplayConfig.models` (those fields are accepted on the config object but unused by the implementation today)
+
+CLI `replay <runId>` does **not** use ReplayHarness; it loads via `ClankaKernel` and prints timestamp deltas.
 
 ## run.started
 - Required fields: none
@@ -356,9 +364,9 @@ ReplayHarness consumes `Event[]` from EventLog. It does not introduce stricter p
 
 # Diff
 
-Source: `src/diff.ts`.
+Source: `src/diff.ts` (also re-exported by `@clankamode/core-runtime`).
 
-Diff compares `CognitiveEvent` objects from `src/runtime/kernel.ts`, where `type` is an unconstrained `string`. No enum validation is applied.
+Diff compares `CognitiveEvent` objects from `src/runtime/kernel.ts`, where `type` is an unconstrained `string`. No enum validation is applied. The labels below are **examples** commonly seen in CLI/kernel traces and tests — not a closed Diff event enum and not the EventLog `EventTypeSchema` set.
 
 ## any-string type (CognitiveEvent.type)
 - Required fields: none enforced by Diff for `payload`
@@ -372,7 +380,7 @@ Diff compares `CognitiveEvent` objects from `src/runtime/kernel.ts`, where `type
 }
 ```
 
-## run.start
+## Example: `run.start` (CLI/kernel startup label)
 - Required fields: none
 - Optional fields: any payload keys
 - Example payload:
@@ -380,7 +388,7 @@ Diff compares `CognitiveEvent` objects from `src/runtime/kernel.ts`, where `type
 {}
 ```
 
-## tool.call
+## Example: `tool.call` (open-string kernel type used in tests)
 - Required fields: none
 - Optional fields: any payload keys
 - Example payload:
@@ -391,7 +399,7 @@ Diff compares `CognitiveEvent` objects from `src/runtime/kernel.ts`, where `type
 }
 ```
 
-## fs.changed
+## Example: `fs.changed` (open-string kernel type used in tests)
 - Required fields: none
 - Optional fields: any payload keys
 - Example payload:
