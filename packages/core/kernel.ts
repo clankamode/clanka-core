@@ -5,20 +5,20 @@ import { Event, EventType } from './event.js';
 import { Invariant } from './invariant.js';
 import { EventLogger } from './logger.js';
 
-export interface KernelConfig {
+export interface EventLogKernelConfig {
   logger?: EventLogger;
   invariants?: Invariant[];
   v?: number;
 }
 
-export interface VerifyResult {
+/** Same shape as runtime kernel.verify(): digest + seq + causes only. */
+export interface EventLogVerifyResult {
   valid: boolean;
   eventCount: number;
 }
 
 /**
- * Recursive canonical JSON used for content-addressable event digests.
- * Matches src/runtime/kernel.ts — nested keys are sorted; undefined omitted.
+ * Recursive canonical JSON for EventLog digests (matches src/runtime/kernel.ts).
  * Do not use event.canonicalJSON for digests: JSON.stringify(obj, Object.keys(obj))
  * strips nested payload keys and collapses distinct events onto the same id.
  */
@@ -37,7 +37,13 @@ function digestEvent(eventWithoutId: Omit<Event, 'id'>): string {
   return createHash('sha256').update(toCanonical(eventWithoutId)).digest('hex');
 }
 
-export class ClankaKernel {
+/**
+ * EventLog-typed in-memory kernel for packages/core modules.
+ * Not the operator ClankaKernel — that lives in src/runtime (published via
+ * @clankamode/core / @clankamode/core-runtime). Operator `clanka-core verify`
+ * calls runtime kernel.verify() (digest/seq/causes), not EventLog verifyRun.
+ */
+export class EventLogKernel {
   private runId: string;
   private logger?: EventLogger;
   private invariants: Invariant[] = [];
@@ -45,7 +51,7 @@ export class ClankaKernel {
   private v: number;
   private checkingInvariants = false;
 
-  constructor(runId: string, config: KernelConfig = {}) {
+  constructor(runId: string, config: EventLogKernelConfig = {}) {
     this.runId = runId;
     this.logger = config.logger;
     this.invariants = config.invariants || [];
@@ -94,7 +100,6 @@ export class ClankaKernel {
   }
 
   private async checkInvariants(triggerEvent: Event) {
-    // Avoid re-entrant invariant.failed storms while recording a failure.
     if (this.checkingInvariants) return;
     this.checkingInvariants = true;
     try {
@@ -135,7 +140,8 @@ export class ClankaKernel {
     return this.history.map((event) => JSON.stringify(event)).join('\n');
   }
 
-  public verify(): VerifyResult {
+  /** Digest / seq / causes — same contract as runtime ClankaKernel.verify(). */
+  public verify(): EventLogVerifyResult {
     const eventIds = new Set<string>();
     const idToSeq = new Map<string, number>();
 
@@ -173,8 +179,8 @@ export class ClankaKernel {
     return { valid: true, eventCount: this.history.length };
   }
 
-  public static fromJSONL(runId: string, jsonl: string): ClankaKernel {
-    const kernel = new ClankaKernel(runId);
+  public static fromJSONL(runId: string, jsonl: string): EventLogKernel {
+    const kernel = new EventLogKernel(runId);
     const lines = jsonl
       .split('\n')
       .map((line) => line.trim())
@@ -184,9 +190,9 @@ export class ClankaKernel {
     return kernel;
   }
 
-  public static loadFromFile(runId: string, runsDir = 'runs'): ClankaKernel {
+  public static loadFromFile(runId: string, runsDir = 'runs'): EventLogKernel {
     const runPath = path.join(runsDir, `${runId}.jsonl`);
     const content = fs.readFileSync(runPath, 'utf-8');
-    return ClankaKernel.fromJSONL(runId, content);
+    return EventLogKernel.fromJSONL(runId, content);
   }
 }
