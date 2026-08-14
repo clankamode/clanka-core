@@ -6,6 +6,7 @@ _Generated from `git log --oneline --no-merges` (latest 20 entries)._
 - _none_
 
 ## Fixes
+- `6aa2346` fix(cli): reject unknown options instead of silent success (#83)
 - `8c0fb01` fix(cli): honest empty replay instead of silent success (#82)
 - `c456f28` fix(npm): honest package description; drop phantom examples dir (#81)
 - `4329d8a` fix(cli): refuse silent overwrite on run without --force
@@ -23,14 +24,13 @@ _Generated from `git log --oneline --no-merges` (latest 20 entries)._
 - `9dccb99` chore(deps-dev): bump the dependencies group with 2 updates (#66)
 - `77bdc92` chore(deps-dev): bump picomatch from 4.0.3 to 4.0.4 (#65)
 - `8cf24df` chore(deps-dev): bump the dependencies group with 2 updates (#63)
-- `83ef365` chore: bump CI node version to 24 (#64)
 
 ## Tests
 - _none_
 
 ## Other
+- `670f4aa` docs: rewrite PLAN/PROMPT/IMPLEMENT in past tense
+- `003dc6d` docs: honesty pass for TASKS, CLI, schemas, and publish status
 - `f6b7de9` docs: call out run.start vs run.started naming split
 - `1f1b35c` docs: align README and TASKS with real CLI export behavior
-- `f0193f1` docs: add missing CLI commands to README (closes #49)
-- `75bee47` docs: add event schema reference (closes #46)
 
