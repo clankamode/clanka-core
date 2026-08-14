@@ -5,7 +5,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import { EventLogger, type LoggerConfig } from './logger';
-import type { Event } from './event';
+import { contentDigest, createEvent, type Event } from './event';
+import { verifyRun } from './verify';
 
 class CaptureStream extends Writable {
   private chunks: string[] = [];
@@ -210,13 +211,56 @@ test('getIndex reports first/last timestamps after append', async () => {
       started: 100,
       finished: 250,
     });
+
+    // Second call uses the in-memory metadata, not a fresh full-file seek index.
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index',
+      eventCount: 2,
+      started: 100,
+      finished: 250,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex loads existing JSONL once then tracks further appends', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logPath = path.join(config.runsDir, 'run-index-seed.jsonl');
+    fs.mkdirSync(config.runsDir, { recursive: true });
+    fs.writeFileSync(
+      logPath,
+      `${JSON.stringify(makeEvent({ id: 'seed', seq: 0, timestamp: 50, type: 'run.started' }))}\n`,
+    );
+
+    const logger = new EventLogger('run-index-seed', config);
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-seed',
+      eventCount: 1,
+      started: 50,
+      finished: 50,
+    });
+
+    await logger.append(
+      makeEvent({ id: 'next', seq: 1, timestamp: 75, type: 'run.finished' }),
+    );
+
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-seed',
+      eventCount: 2,
+      started: 50,
+      finished: 75,
+    });
   } finally {
     cleanup();
   }
 });
 
 describe('blob offload', () => {
-  test('large payloads round-trip through blob storage', async () => {
+  test('large payloads stay in JSONL and are mirrored to blob storage', async () => {
     const output = new CaptureStream();
     const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
 
@@ -235,10 +279,12 @@ describe('blob offload', () => {
 
       const logPath = path.join(config.runsDir, 'run-blob.jsonl');
       const raw = JSON.parse(fs.readFileSync(logPath, 'utf-8').trim());
-      assert.deepEqual(raw.payload, { _blobRef: 'evt-blob' });
+      assert.deepEqual(raw.payload, payload);
+      assert.equal('_blobRef' in raw.payload, false);
 
       const blobPath = path.join(config.blobsDir, 'run-blob', 'evt-blob.json');
       assert.equal(fs.existsSync(blobPath), true);
+      assert.deepEqual(JSON.parse(fs.readFileSync(blobPath, 'utf-8')), payload);
 
       const restored = await logger.readLog();
       assert.equal(restored.length, 1);
@@ -248,28 +294,63 @@ describe('blob offload', () => {
     }
   });
 
-  test('readLog throws when a blob reference is missing', async () => {
+  test('large payload JSONL lines keep a verifiable content digest', async () => {
     const output = new CaptureStream();
     const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
 
     try {
-      const logger = new EventLogger('run-missing-blob', config);
-      await logger.append(
+      const logger = new EventLogger('run-digest', config);
+      const event = createEvent(1.1, 'run.started', 'run-digest', 0, {
+        blob: 'z'.repeat(200),
+      });
+      await logger.append(event);
+
+      const logPath = path.join(config.runsDir, 'run-digest.jsonl');
+      const raw = JSON.parse(fs.readFileSync(logPath, 'utf-8').trim());
+      assert.deepEqual(raw.payload, event.payload);
+
+      const { id: actualId, ...eventWithoutId } = raw;
+      const recomputed = contentDigest(eventWithoutId);
+      assert.equal(actualId, recomputed);
+      assert.equal(actualId, event.id);
+
+      const verified = await verifyRun(logPath);
+      assert.equal(verified.valid, true);
+      assert.equal(verified.eventCount, 1);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('readLog still hydrates legacy {_blobRef} stubs and throws when missing', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-legacy-blob', config);
+      const payload = { blob: 'y'.repeat(200) };
+      const blobPath = path.join(config.blobsDir, 'run-legacy-blob', 'evt-legacy.json');
+      fs.mkdirSync(path.dirname(blobPath), { recursive: true });
+      fs.writeFileSync(blobPath, JSON.stringify(payload, null, 2));
+
+      const legacyLine = JSON.stringify(
         makeEvent({
-          id: 'evt-missing',
+          id: 'evt-legacy',
           seq: 0,
           timestamp: 100,
           type: 'run.started',
-          payload: { blob: 'y'.repeat(200) },
+          payload: { _blobRef: 'evt-legacy' },
         }),
       );
+      fs.appendFileSync(path.join(config.runsDir, 'run-legacy-blob.jsonl'), `${legacyLine}\n`);
 
-      const blobPath = path.join(config.blobsDir, 'run-missing-blob', 'evt-missing.json');
+      const restored = await logger.readLog();
+      assert.deepEqual(restored[0].payload, payload);
+
       fs.rmSync(blobPath);
-
       await assert.rejects(
         () => logger.readLog(),
-        /Missing blob for event evt-missing: evt-missing/,
+        /Missing blob for event evt-legacy: evt-legacy/,
       );
     } finally {
       cleanup();
