@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createLogger } from './index';
+import { createLogger as createLoggerFromIndex } from './index';
+import { createLogger } from './structured-logger';
 
 class CaptureWriter {
   private readonly chunks: string[] = [];
@@ -24,7 +25,10 @@ class CaptureWriter {
 
 const FIXED_TIMESTAMP = '2026-03-08T08:00:00.000Z';
 
-test('createLogger is exported and emits JSON entries for all log levels', () => {
+test('createLogger is exported from index and module sink emits JSON for all levels', () => {
+  assert.equal(createLoggerFromIndex, createLogger);
+  assert.equal(typeof createLogger, 'function');
+
   const output = new CaptureWriter();
   const logger = createLogger({
     level: 'debug',
@@ -34,8 +38,6 @@ test('createLogger is exported and emits JSON entries for all log levels', () =>
     traceId: 'trace-1',
     now: () => FIXED_TIMESTAMP,
   });
-
-  assert.equal(typeof createLogger, 'function');
 
   logger.debug('debug message');
   logger.info('info message');
@@ -174,4 +176,95 @@ test('silent mode suppresses output for parent and child loggers', () => {
   logger.child({ requestId: 'req-silent' }).warn('suppressed child');
 
   assert.equal(output.toString(), '');
+});
+
+test('default level is info so debug is a documented no-op unless level is lowered', () => {
+  const output = new CaptureWriter();
+  const logger = createLogger({
+    output,
+    now: () => FIXED_TIMESTAMP,
+  });
+
+  logger.debug('hidden by default');
+  logger.info('visible by default');
+
+  const entries = output.entries() as Array<{
+    timestamp: string;
+    level: string;
+    message: string;
+    context: Record<string, unknown>;
+  }>;
+
+  assert.deepEqual(entries, [
+    {
+      timestamp: FIXED_TIMESTAMP,
+      level: 'info',
+      message: 'visible by default',
+      context: {},
+    },
+  ]);
+});
+
+test('Error context values keep name/message/stack for callers to parse', () => {
+  const output = new CaptureWriter();
+  const logger = createLogger({
+    level: 'debug',
+    output,
+    now: () => FIXED_TIMESTAMP,
+  });
+
+  const cause = new Error('root cause');
+  const err = new Error('boom', { cause });
+  err.name = 'ProbeError';
+
+  logger.error('failed', { err, attempt: 3 });
+
+  const [entry] = output.entries() as Array<{
+    timestamp: string;
+    level: string;
+    message: string;
+    context: {
+      attempt: number;
+      err: { name: string; message: string; stack?: string; cause?: { message: string } };
+    };
+  }>;
+
+  assert.equal(entry.level, 'error');
+  assert.equal(entry.message, 'failed');
+  assert.equal(entry.context.attempt, 3);
+  assert.equal(entry.context.err.name, 'ProbeError');
+  assert.equal(entry.context.err.message, 'boom');
+  assert.equal(typeof entry.context.err.stack, 'string');
+  assert.match(String(entry.context.err.stack), /boom/);
+  assert.equal(entry.context.err.cause?.message, 'root cause');
+});
+
+test('undefined context keys are omitted; null and nested fields are preserved', () => {
+  const output = new CaptureWriter();
+  const logger = createLogger({
+    level: 'info',
+    output,
+    context: { keep: true, drop: undefined },
+    now: () => FIXED_TIMESTAMP,
+  });
+
+  logger.info('fields', {
+    present: 'yes',
+    absent: undefined,
+    empty: null,
+    nested: { a: 1, b: undefined },
+  });
+
+  const [entry] = output.entries() as Array<{
+    context: Record<string, unknown>;
+  }>;
+
+  assert.deepEqual(entry.context, {
+    keep: true,
+    present: 'yes',
+    empty: null,
+    nested: { a: 1 },
+  });
+  assert.equal('drop' in entry.context, false);
+  assert.equal('absent' in entry.context, false);
 });

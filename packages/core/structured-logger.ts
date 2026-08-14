@@ -19,7 +19,9 @@ export interface StructuredLogEntry {
 }
 
 export interface StructuredLoggerOptions {
+  /** Minimum level to emit. Defaults to `info` (so `debug` is suppressed). */
   level?: LogLevel;
+  /** When true, all log methods are no-ops (including children). */
   silent?: boolean;
   output?: LogOutput;
   context?: LoggerContext;
@@ -37,12 +39,34 @@ export interface StructuredLogger {
   child(context?: LoggerContext): StructuredLogger;
 }
 
+/**
+ * JSON-line logger with level filtering and context propagation.
+ *
+ * Honesty notes:
+ * - Entries below `options.level` (default `info`) are dropped; `silent` drops all.
+ * - No secret redaction: context is serialized as provided. `Error` values are
+ *   expanded to `{ name, message, stack, cause? }` so callers can parse them.
+ * - `undefined` context values are omitted; other values are preserved in JSON.
+ */
+
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
   warn: 30,
   error: 40,
 };
+
+function serializeLogValue(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      ...(value.cause !== undefined ? { cause: value.cause } : {}),
+    };
+  }
+  return value;
+}
 
 function compactContext(context: LoggerContext): LoggerContext {
   const normalized: LoggerContext = {};
@@ -108,7 +132,7 @@ export function createLogger(options: StructuredLoggerOptions = {}): StructuredL
       context: mergeContext(baseContext, context),
     };
 
-    output.write(`${JSON.stringify(entry)}\n`);
+    output.write(`${JSON.stringify(entry, serializeLogValue)}\n`);
   }
 
   return {

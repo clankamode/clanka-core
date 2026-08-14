@@ -5,7 +5,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Writable } from 'node:stream';
 import { EventLogger, type LoggerConfig } from './logger';
-import type { Event } from './event';
+import { contentDigest, createEvent, type Event } from './event';
+import { verifyRun } from './verify';
 
 class CaptureStream extends Writable {
   private chunks: string[] = [];
@@ -127,6 +128,234 @@ test('structured output flag --json emits JSON lines', () => {
   } finally {
     cleanup();
   }
+});
+
+test('structured output expands Error context instead of emitting empty objects', () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output, { structuredOutput: true });
+
+  try {
+    const logger = new EventLogger('run-error-ctx', config);
+    const err = new Error('disk full');
+    err.name = 'StorageError';
+    logger.error('write failed', { err });
+
+    const entry = JSON.parse(output.toString().trim());
+    assert.equal(entry.level, 'error');
+    assert.equal(entry.message, 'write failed');
+    assert.equal(entry.context.err.name, 'StorageError');
+    assert.equal(entry.context.err.message, 'disk full');
+    assert.equal(typeof entry.context.err.stack, 'string');
+    assert.match(entry.context.err.stack, /disk full/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('append writes to JSONL sink, not the console output stream', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-sink', config);
+    await logger.append(
+      makeEvent({
+        id: 'evt-sink',
+        seq: 0,
+        timestamp: 100,
+        type: 'run.started',
+        payload: { ok: true },
+      }),
+    );
+
+    assert.equal(output.toString(), '');
+    const restored = await logger.readLog();
+    assert.equal(restored.length, 1);
+    assert.equal(restored[0].id, 'evt-sink');
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex returns empty metadata when the JSONL file is missing', () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-index-empty', config);
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-empty',
+      eventCount: 0,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex reports first/last timestamps after append', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-index', config);
+    await logger.append(
+      makeEvent({ id: 'e0', seq: 0, timestamp: 100, type: 'run.started' }),
+    );
+    await logger.append(
+      makeEvent({ id: 'e1', seq: 1, timestamp: 250, type: 'run.finished' }),
+    );
+
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index',
+      eventCount: 2,
+      started: 100,
+      finished: 250,
+    });
+
+    // Second call uses the in-memory metadata, not a fresh full-file seek index.
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index',
+      eventCount: 2,
+      started: 100,
+      finished: 250,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex loads existing JSONL once then tracks further appends', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logPath = path.join(config.runsDir, 'run-index-seed.jsonl');
+    fs.mkdirSync(config.runsDir, { recursive: true });
+    fs.writeFileSync(
+      logPath,
+      `${JSON.stringify(makeEvent({ id: 'seed', seq: 0, timestamp: 50, type: 'run.started' }))}\n`,
+    );
+
+    const logger = new EventLogger('run-index-seed', config);
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-seed',
+      eventCount: 1,
+      started: 50,
+      finished: 50,
+    });
+
+    await logger.append(
+      makeEvent({ id: 'next', seq: 1, timestamp: 75, type: 'run.finished' }),
+    );
+
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-seed',
+      eventCount: 2,
+      started: 50,
+      finished: 75,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+describe('blob offload', () => {
+  test('large payloads stay in JSONL and are mirrored to blob storage', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-blob', config);
+      const payload = { blob: 'x'.repeat(200) };
+      await logger.append(
+        makeEvent({
+          id: 'evt-blob',
+          seq: 0,
+          timestamp: 100,
+          type: 'run.started',
+          payload,
+        }),
+      );
+
+      const logPath = path.join(config.runsDir, 'run-blob.jsonl');
+      const raw = JSON.parse(fs.readFileSync(logPath, 'utf-8').trim());
+      assert.deepEqual(raw.payload, payload);
+      assert.equal('_blobRef' in raw.payload, false);
+
+      const blobPath = path.join(config.blobsDir, 'run-blob', 'evt-blob.json');
+      assert.equal(fs.existsSync(blobPath), true);
+      assert.deepEqual(JSON.parse(fs.readFileSync(blobPath, 'utf-8')), payload);
+
+      const restored = await logger.readLog();
+      assert.equal(restored.length, 1);
+      assert.deepEqual(restored[0].payload, payload);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('large payload JSONL lines keep a verifiable content digest', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-digest', config);
+      const event = createEvent(1.1, 'run.started', 'run-digest', 0, {
+        blob: 'z'.repeat(200),
+      });
+      await logger.append(event);
+
+      const logPath = path.join(config.runsDir, 'run-digest.jsonl');
+      const raw = JSON.parse(fs.readFileSync(logPath, 'utf-8').trim());
+      assert.deepEqual(raw.payload, event.payload);
+
+      const { id: actualId, ...eventWithoutId } = raw;
+      const recomputed = contentDigest(eventWithoutId);
+      assert.equal(actualId, recomputed);
+      assert.equal(actualId, event.id);
+
+      const verified = await verifyRun(logPath);
+      assert.equal(verified.valid, true);
+      assert.equal(verified.eventCount, 1);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('readLog still hydrates legacy {_blobRef} stubs and throws when missing', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-legacy-blob', config);
+      const payload = { blob: 'y'.repeat(200) };
+      const blobPath = path.join(config.blobsDir, 'run-legacy-blob', 'evt-legacy.json');
+      fs.mkdirSync(path.dirname(blobPath), { recursive: true });
+      fs.writeFileSync(blobPath, JSON.stringify(payload, null, 2));
+
+      const legacyLine = JSON.stringify(
+        makeEvent({
+          id: 'evt-legacy',
+          seq: 0,
+          timestamp: 100,
+          type: 'run.started',
+          payload: { _blobRef: 'evt-legacy' },
+        }),
+      );
+      fs.appendFileSync(path.join(config.runsDir, 'run-legacy-blob.jsonl'), `${legacyLine}\n`);
+
+      const restored = await logger.readLog();
+      assert.deepEqual(restored[0].payload, payload);
+
+      fs.rmSync(blobPath);
+      await assert.rejects(
+        () => logger.readLog(),
+        /Missing blob for event evt-legacy: evt-legacy/,
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 describe('append/read ordering', () => {
