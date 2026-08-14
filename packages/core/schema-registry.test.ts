@@ -126,7 +126,109 @@ describe('SchemaRegistry', () => {
 
     assert.throws(
       () => registry.register('', z.object({})),
-      /Event type must be a non-empty string/,
+      /Invalid/,
+    );
+  });
+
+  test('register rejects event types outside the CONTRACT registry set', () => {
+    const registry = new SchemaRegistry();
+
+    assert.throws(
+      () => registry.register('totally.fake', z.object({})),
+      /Invalid/,
+    );
+    assert.throws(
+      () => registry.register('run.start', z.object({})),
+      /Invalid/,
+    );
+  });
+
+  test('validate rejects unknown event types instead of storing them', () => {
+    const registry = new SchemaRegistry();
+    registry.register('run.started', z.object({ name: z.string() }));
+
+    assert.throws(
+      () => registry.validate(makeEvent({ type: 'totally.fake', payload: {} })),
+      /Invalid event/,
+    );
+    assert.throws(
+      () => registry.validate(makeEvent({ type: 'run.start', payload: {} })),
+      /Invalid event/,
+    );
+  });
+
+  test('forEventLog registers every EventLog type with open payloads', () => {
+    const registry = SchemaRegistry.forEventLog();
+
+    assert.deepEqual(registry.listTypes(), [
+      'agent.finished',
+      'agent.started',
+      'budget.exhausted',
+      'decision.made',
+      'fs.diff',
+      'fs.snapshot',
+      'invariant.failed',
+      'model.requested',
+      'model.responded',
+      'run.commit',
+      'run.finished',
+      'run.started',
+      'tool.requested',
+      'tool.responded',
+    ]);
+
+    const parsed = registry.validate(
+      makeEvent({ type: 'budget.exhausted', payload: { budget: 'tokens', remaining: 0 } }),
+    );
+    assert.equal(parsed.type, 'budget.exhausted');
+  });
+
+  test('forEventLog does not accept error.raised without explicit registration', () => {
+    const registry = SchemaRegistry.forEventLog();
+
+    assert.throws(
+      () => registry.validate(makeEvent({
+        type: 'error.raised',
+        payload: { code: 'E', message: 'x' },
+      })),
+      /No schema registered for event type "error.raised"/,
+    );
+
+    registry.register('error.raised', z.object({ code: z.string(), message: z.string() }));
+    const parsed = registry.validate(makeEvent({
+      type: 'error.raised',
+      payload: { code: 'E', message: 'x' },
+    }));
+    assert.equal(parsed.type, 'error.raised');
+  });
+
+  test('forStrictContract enforces CONTRACT required payload fields', () => {
+    const registry = SchemaRegistry.forStrictContract();
+
+    assert.throws(
+      () => registry.validate(makeEvent({ type: 'run.started', payload: { name: 'only-name' } })),
+      /Invalid payload for event type "run.started"/,
+    );
+
+    const parsed = registry.validate(makeEvent({
+      type: 'run.started',
+      payload: { name: 'clanka-core', version: '1.0.0' },
+    }));
+    assert.deepEqual(parsed.payload, { name: 'clanka-core', version: '1.0.0' });
+
+    const errorEvent = registry.validate(makeEvent({
+      type: 'error.raised',
+      payload: { code: 'E_TOOL', message: 'Tool execution failed' },
+    }));
+    assert.equal(errorEvent.type, 'error.raised');
+  });
+
+  test('forStrictContract rejects EventLog-only types that lack a strict schema', () => {
+    const registry = SchemaRegistry.forStrictContract();
+
+    assert.throws(
+      () => registry.validate(makeEvent({ type: 'run.commit', payload: { commitHash: 'abc' } })),
+      /No schema registered for event type "run.commit"/,
     );
   });
 
