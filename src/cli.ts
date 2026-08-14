@@ -79,10 +79,20 @@ async function cmdLog(runId: string, type: string, payloadJson: string) {
   console.log(`${runId} ${count}`);
 }
 
-export function cmdReplay(runId: string, writeLine: (line: string) => void = console.log) {
+export function cmdReplay(
+  runId: string,
+  writeLine: (line: string) => void = console.log,
+  writeError: (line: string) => void = console.error,
+) {
   const kernel = loadRun(runId);
   const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
-  const firstTimestamp = events[0]?.timestamp ?? 0;
+
+  if (events.length === 0) {
+    writeError(`No events in run ${runId}`);
+    return;
+  }
+
+  const firstTimestamp = events[0].timestamp;
 
   for (const event of events) {
     const deltaMs = event.timestamp - firstTimestamp;
