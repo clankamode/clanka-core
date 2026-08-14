@@ -28,9 +28,18 @@ export type { EventStoreQuery } from './event-store.js';
 export { ReplayHarness } from './replay.js';
 export type { MockModel, MockTool, ReplayConfig } from './replay.js';
 
-export { ClankaKernel } from './kernel.js';
-export type { KernelConfig } from './kernel.js';
+// packages/core is NOT a workspace/npm package. Do not export ClankaKernel here —
+// operators get that from src/runtime (@clankamode/core / @clankamode/core-runtime)
+// and `clanka-core verify` uses runtime kernel.verify() (digest/seq/causes).
+// EventLogKernel is the local EventLog-typed companion only.
+export { EventLogKernel, toCanonical } from './kernel.js';
+export type {
+  EventLogKernelConfig,
+  EventLogVerifyResult,
+} from './kernel.js';
 
+// EventLog file verifier (schema + fs replay). Not what `clanka-core verify` runs.
+// packages/core/bin/clanka is a separate, unbuilt helper that requires dist/verify.js.
 export { verifyRun } from './verify.js';
 
 export { createLogger } from './structured-logger.js';
