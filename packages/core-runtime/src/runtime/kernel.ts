@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+/** Schema version written by `log()` and required by `verify()`. */
+export const EVENT_SCHEMA_VERSION = 1.1;
+
 export interface CognitiveEvent {
   v: number;
   id: string;
@@ -50,41 +53,57 @@ export class ClankaKernel {
     this.state.invariants.push(invariant);
   }
 
-  public async log(
-    type: string, 
-    agentId: string, 
-    payload: any, 
-    causes: string[] = []
-  ): Promise<CognitiveEvent> {
-    const eventData: any = {
-      v: 1.1,
+  private appendEvent(
+    type: string,
+    agentId: string,
+    payload: any,
+    causes: string[] = [],
+  ): CognitiveEvent {
+    const eventData: Omit<CognitiveEvent, 'id'> = {
+      v: EVENT_SCHEMA_VERSION,
       runId: this.sessionId,
       seq: this.state.history.length,
       type,
       timestamp: Date.now(),
       causes,
       payload,
-      meta: { agentId }
+      meta: { agentId },
     };
 
-    // Digest-based ID
     const id = createHash('sha256').update(toCanonical(eventData)).digest('hex');
     const event = { ...eventData, id } as CognitiveEvent;
-
     this.state.history.push(event);
-    await this.enforceInvariants();
     return event;
   }
 
-  private async enforceInvariants() {
-    for (const invariant of this.state.invariants) {
-      const result = await invariant.check({ events: this.state.history, runId: this.sessionId });
+  public async log(
+    type: string,
+    agentId: string,
+    payload: any,
+    causes: string[] = [],
+  ): Promise<CognitiveEvent> {
+    const event = this.appendEvent(type, agentId, payload, causes);
+    await this.enforceInvariants(event);
+    return event;
+  }
+
+  private async enforceInvariants(triggeringEvent: CognitiveEvent) {
+    // Copy the list so registration during checks cannot change iteration.
+    const invariants = [...this.state.invariants];
+    for (const invariant of invariants) {
+      const result = await invariant.check({
+        events: this.state.history,
+        runId: this.sessionId,
+        event: triggeringEvent,
+      });
       if (!result.valid) {
-        await this.log('invariant.failed', 'kernel', {
+        // Append directly — do not re-enter enforceInvariants via log().
+        // Pin cause to the triggering event (not history tip after awaits).
+        this.appendEvent('invariant.failed', 'kernel', {
           invariant: invariant.name,
           message: result.message || 'No message',
           severity: result.severity,
-        }, [this.state.history[this.state.history.length - 1].id]);
+        }, [triggeringEvent.id]);
       }
     }
   }
@@ -104,6 +123,7 @@ export class ClankaKernel {
   public verify(): VerifyResult {
     const eventIds = new Set<string>();
     const idToSeq = new Map<string, number>();
+    let previousTimestamp: number | undefined;
 
     for (let expectedSeq = 0; expectedSeq < this.state.history.length; expectedSeq++) {
       const event = this.state.history[expectedSeq];
@@ -112,6 +132,28 @@ export class ClankaKernel {
 
       if (actualId !== recomputedDigest) {
         throw new Error(`Event ${event.seq} has invalid digest. Expected: ${recomputedDigest}`);
+      }
+
+      if (event.v !== EVENT_SCHEMA_VERSION) {
+        throw new Error(
+          `Event ${event.seq} has invalid version ${event.v}, expected ${EVENT_SCHEMA_VERSION}`,
+        );
+      }
+
+      if (event.runId !== this.sessionId) {
+        throw new Error(
+          `Event ${event.seq} has runId ${event.runId}, expected ${this.sessionId}`,
+        );
+      }
+
+      if (typeof event.timestamp !== 'number' || !Number.isFinite(event.timestamp)) {
+        throw new Error(`Event ${event.seq} has invalid timestamp: ${event.timestamp}`);
+      }
+
+      if (previousTimestamp !== undefined && event.timestamp < previousTimestamp) {
+        throw new Error(
+          `Event ${event.seq} has decreasing timestamp ${event.timestamp} < ${previousTimestamp}`,
+        );
       }
 
       if (event.seq !== expectedSeq) {
@@ -130,6 +172,7 @@ export class ClankaKernel {
 
       eventIds.add(event.id);
       idToSeq.set(event.id, event.seq);
+      previousTimestamp = event.timestamp;
     }
 
     return { valid: true, eventCount: this.state.history.length };

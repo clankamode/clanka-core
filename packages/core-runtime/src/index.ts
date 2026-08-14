@@ -1,4 +1,4 @@
-export { ClankaKernel, toCanonical } from './runtime/kernel.js';
+export { ClankaKernel, EVENT_SCHEMA_VERSION, toCanonical } from './runtime/kernel.js';
 export type {
   CognitiveEvent,
   Invariant,
