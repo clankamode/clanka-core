@@ -9,9 +9,9 @@ interface FSState {
 /**
  * Deep canonical JSON for content-addressable event digests.
  *
- * Nested object keys are sorted recursively. This is intentionally local:
- * `canonicalJSON` in event.ts only whitelists top-level keys and drops payload
- * contents, which cannot provide integrity over event bodies.
+ * Nested object keys are sorted recursively. Must stay aligned with
+ * `canonicalJSON` / `contentDigest` in event.ts and `toCanonical` in kernel.ts
+ * so createEvent-minted logs pass verifyRun.
  */
 export function toCanonical(obj: unknown): string {
   if (obj === null || typeof obj !== 'object') {

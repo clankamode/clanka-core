@@ -46,7 +46,6 @@ describe('verifyRun digest integrity', () => {
     const source = fs.readFileSync(path.join(__dirname, 'verify.ts'), 'utf8');
     assert.match(source, /Not wired into the published `clanka-core` CLI/);
     assert.match(source, /kernel\.verify\(\)/);
-    assert.equal(source.includes('canonicalJSON'), true); // mentioned as insufficient
   });
 
   test('accepts the repo golden run file', async () => {
@@ -90,7 +89,8 @@ describe('verifyRun digest integrity', () => {
   });
 
   test('rejects shallow digests that ignore payload contents', async () => {
-    // Mimic packages/core/event.ts canonicalJSON (top-level key whitelist only)
+    // Historical broken form: JSON.stringify(obj, Object.keys(obj)) whitelists
+    // only top-level keys and drops nested payload fields.
     const brokenCanonical = (obj: Record<string, unknown>) =>
       JSON.stringify(obj, Object.keys(obj).sort());
 

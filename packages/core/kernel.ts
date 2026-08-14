@@ -18,9 +18,8 @@ export interface EventLogVerifyResult {
 }
 
 /**
- * Recursive canonical JSON for EventLog digests (matches src/runtime/kernel.ts).
- * Do not use event.canonicalJSON for digests: JSON.stringify(obj, Object.keys(obj))
- * strips nested payload keys and collapses distinct events onto the same id.
+ * Recursive canonical JSON for EventLog digests (matches src/runtime/kernel.ts
+ * and packages/core/event.ts canonicalJSON).
  */
 export function toCanonical(obj: unknown): string {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
