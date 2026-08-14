@@ -124,3 +124,7 @@ export const StrictEventSchema = z.discriminatedUnion('type', [
 
 export type StrictEvent = z.infer<typeof StrictEventSchema>;
 
+/** CONTRACT.md name for the strict DAR union (distinct from EventLog `EventSchema` in event.ts). */
+export const EventSchema = StrictEventSchema;
+export type Event = StrictEvent;
+

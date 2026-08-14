@@ -1,6 +1,7 @@
 import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  EventSchema,
   StrictEventSchema,
   StrictEventTypeSchema,
   StrictPayloadSchemas,
@@ -39,6 +40,10 @@ describe('types.ts StrictEventSchema (CONTRACT.md strict matrix)', () => {
     assert.equal(StrictEventTypeSchema.safeParse('run.commit').success, false);
     assert.equal(StrictEventTypeSchema.safeParse('budget.exhausted').success, false);
     assert.equal(StrictEventTypeSchema.safeParse('run.start').success, false);
+  });
+
+  test('CONTRACT EventSchema alias points at StrictEventSchema', () => {
+    assert.equal(EventSchema, StrictEventSchema);
   });
 
   test('is a distinct schema from EventLog EventSchema (rejects CLI run.start)', () => {
