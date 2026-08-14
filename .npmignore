@@ -3,4 +3,3 @@ src/
 TASKS.md
 *.md
 !README.md
-!CHANGELOG.md

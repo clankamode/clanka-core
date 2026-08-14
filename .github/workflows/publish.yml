@@ -14,13 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Secrets cannot be referenced in `if:` — map to env first (GitHub docs).
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Need enough history for version comparison and changelog generation.
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Detect version change
         id: version_check
@@ -54,16 +56,12 @@ jobs:
         if: steps.version_check.outputs.changed == 'true'
         run: npm ci
 
-      - name: Generate changelog for published tarball
-        if: steps.version_check.outputs.changed == 'true'
-        run: npm run changelog
-
       - name: Publish to npm
-        if: steps.version_check.outputs.changed == 'true' && secrets.NPM_TOKEN != ''
+        if: steps.version_check.outputs.changed == 'true' && env.NPM_TOKEN != ''
         run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
 
       - name: Skip publish (no NPM_TOKEN)
-        if: steps.version_check.outputs.changed == 'true' && secrets.NPM_TOKEN == ''
+        if: steps.version_check.outputs.changed == 'true' && env.NPM_TOKEN == ''
         run: echo "NPM_TOKEN is not configured; skipping publish."

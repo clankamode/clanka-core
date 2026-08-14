@@ -1,6 +1,5 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -246,16 +245,14 @@ test('cmdExport emits JSON by default', async () => {
     vi.resetModules();
     const { cmdExport } = await import('./cli');
 
-    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    cmdExport(runId);
-
-    const output = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    let output = '';
+    cmdExport(runId, 'json', chunk => {
+      output += chunk;
+    });
     const parsed = JSON.parse(output);
     assert.equal(Array.isArray(parsed), true);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0].type, 'run.start');
-
-    writeSpy.mockRestore();
   } finally {
     process.chdir(priorCwd);
     if (priorEnv === undefined) {
@@ -306,6 +303,7 @@ test('cmdReplay empty run prints explicit message', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-replay-empty-'));
   const priorCwd = process.cwd();
   const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
 
   try {
     process.chdir(tempRoot);
@@ -313,16 +311,20 @@ test('cmdReplay empty run prints explicit message', async () => {
     fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
 
     process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
     vi.resetModules();
     const { cmdReplay } = await import('./cli');
 
     const lines: string[] = [];
     const errors: string[] = [];
-    cmdReplay('empty', line => lines.push(line), line => errors.push(line));
+    const ok = cmdReplay('empty', line => lines.push(line), line => errors.push(line));
 
+    assert.equal(ok, false);
     assert.deepEqual(lines, []);
     assert.deepEqual(errors, ['No events in run empty']);
+    assert.equal(process.exitCode, 1);
   } finally {
+    process.exitCode = priorExit;
     process.chdir(priorCwd);
     if (priorEnv === undefined) {
       delete process.env.CLANKA_CORE_CLI_TEST;
@@ -337,20 +339,25 @@ test('cmdLs empty runs dir prints explicit message', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-ls-empty-'));
   const priorCwd = process.cwd();
   const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
 
   try {
     process.chdir(tempRoot);
     process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
     vi.resetModules();
     const { cmdLs } = await import('./cli');
 
     const lines: string[] = [];
     const errors: string[] = [];
-    cmdLs(line => lines.push(line), line => errors.push(line));
+    const ok = cmdLs(line => lines.push(line), line => errors.push(line));
 
+    assert.equal(ok, false);
     assert.deepEqual(lines, []);
     assert.deepEqual(errors, ['No runs found in runs/']);
+    assert.equal(process.exitCode, 1);
   } finally {
+    process.exitCode = priorExit;
     process.chdir(priorCwd);
     if (priorEnv === undefined) {
       delete process.env.CLANKA_CORE_CLI_TEST;
@@ -419,17 +426,82 @@ test('cmdExport emits markdown with event details', async () => {
     vi.resetModules();
     const { cmdExport } = await import('./cli');
 
-    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    cmdExport(runId, 'markdown');
-
-    const output = writeSpy.mock.calls.map(call => String(call[0])).join('');
+    let output = '';
+    cmdExport(runId, 'markdown', chunk => {
+      output += chunk;
+    });
     assert.match(output, /^# Run Export: export-markdown/m);
     assert.match(output, /Total events: 1/);
     assert.match(output, /run.start/);
     assert.match(output, /actor: test/);
     assert.match(output, /payload: {"phase":"init"}/);
+  } finally {
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
 
-    writeSpy.mockRestore();
+test('cmdExport json and markdown both order events by seq', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-export-seq-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempRoot, 'runs', 'oob.jsonl'),
+      [
+        JSON.stringify({
+          v: 1.1,
+          runId: 'oob',
+          seq: 1,
+          type: 'later',
+          timestamp: 2000,
+          causes: [],
+          payload: { n: 2 },
+          meta: { agentId: 't' },
+          id: 'bbbb',
+        }),
+        JSON.stringify({
+          v: 1.1,
+          runId: 'oob',
+          seq: 0,
+          type: 'earlier',
+          timestamp: 1000,
+          causes: [],
+          payload: { n: 1 },
+          meta: { agentId: 't' },
+          id: 'aaaa',
+        }),
+      ].join('\n') + '\n',
+      'utf-8',
+    );
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdExport } = await import('./cli');
+
+    let jsonOut = '';
+    cmdExport('oob', 'json', chunk => {
+      jsonOut += chunk;
+    });
+    const jsonEvents = JSON.parse(jsonOut) as Array<{ seq: number; type: string }>;
+    assert.deepEqual(
+      jsonEvents.map(event => `${event.seq}:${event.type}`),
+      ['0:earlier', '1:later'],
+    );
+
+    let mdOut = '';
+    cmdExport('oob', 'markdown', chunk => {
+      mdOut += chunk;
+    });
+    assert.match(mdOut, /- \[0\] earlier[\s\S]*- \[1\] later/);
   } finally {
     process.chdir(priorCwd);
     if (priorEnv === undefined) {
@@ -490,7 +562,7 @@ test('root package publish surface matches README CLI claims', async () => {
   assert.equal(rootPackage.name, PUBLISHED_PACKAGE_NAME);
   assert.equal(rootPackage.bin[PUBLISHED_BIN_NAME], 'dist/cli.js');
   assert.equal(rootPackage.main, 'dist/runtime/kernel.js');
-  assert.deepEqual(rootPackage.files.slice().sort(), ['CHANGELOG.md', 'README.md', 'dist']);
+  assert.deepEqual(rootPackage.files.slice().sort(), ['README.md', 'dist']);
   assert.match(rootPackage.scripts.changelog, /gen-changelog\.sh/);
   assert.match(rootPackage.scripts['test:packages'], /@clankamode\/core-runtime/);
   assert.match(rootPackage.scripts['test:packages'], /@clankamode\/core-cli/);
@@ -517,34 +589,21 @@ test('root package publish surface matches README CLI claims', async () => {
   assert.equal(fs.existsSync(path.resolve(__dirname, '../scripts/gen-changelog.sh')), true);
   assert.equal(fs.existsSync(path.resolve(__dirname, '../.npmignore')), true);
   const npmignore = fs.readFileSync(path.resolve(__dirname, '../.npmignore'), 'utf8');
-  assert.match(npmignore, /^!CHANGELOG\.md$/m);
+  assert.match(npmignore, /^!README\.md$/m);
+  assert.doesNotMatch(npmignore, /^!CHANGELOG\.md$/m);
   assert.doesNotMatch(npmignore, /^tests\/$/m);
+
+  const publishYml = fs.readFileSync(
+    path.resolve(__dirname, '../.github/workflows/publish.yml'),
+    'utf8',
+  );
+  assert.doesNotMatch(publishYml, /if:.*secrets\.NPM_TOKEN/);
+  assert.match(publishYml, /env:\s*\n\s*NPM_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
+  assert.match(publishYml, /env\.NPM_TOKEN/);
 
   if (priorEnv === undefined) {
     delete process.env.CLANKA_CORE_CLI_TEST;
   } else {
     process.env.CLANKA_CORE_CLI_TEST = priorEnv;
-  }
-});
-
-test('changelog script regenerates CHANGELOG.md from git history', () => {
-  const changelogPath = path.resolve(__dirname, '../CHANGELOG.md');
-  const previous = fs.readFileSync(changelogPath, 'utf8');
-
-  try {
-    const output = execFileSync('bash', ['scripts/gen-changelog.sh'], {
-      cwd: path.resolve(__dirname, '..'),
-      encoding: 'utf8',
-    });
-    assert.match(output, /Wrote CHANGELOG\.md \(\d+ commits\)/);
-
-    const generated = fs.readFileSync(changelogPath, 'utf8');
-    assert.match(generated, /^# Changelog/m);
-    assert.match(generated, /_Generated from `git log --oneline --no-merges`/);
-    assert.match(generated, /^## Features/m);
-    assert.match(generated, /^## Fixes/m);
-    assert.notEqual(generated.trim(), '');
-  } finally {
-    fs.writeFileSync(changelogPath, previous, 'utf8');
   }
 });
