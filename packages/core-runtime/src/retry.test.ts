@@ -102,6 +102,27 @@ describe('retry', () => {
     assert.equal(operation.mock.calls.length, 0);
   });
 
+  test('maxRetries counts retries after the first attempt', async () => {
+    vi.useFakeTimers();
+
+    const operation = vi.fn(() => {
+      throw new Error('still failing');
+    });
+
+    const pending = retry(operation, {
+      maxRetries: 2,
+      initialDelayMs: 1,
+    });
+    const rejection = assert.rejects(pending, /still failing/);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(2);
+    await rejection;
+
+    // initial attempt + 2 retries
+    assert.equal(operation.mock.calls.length, 3);
+  });
+
   test('aborts while waiting between retries', async () => {
     vi.useFakeTimers();
 

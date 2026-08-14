@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { ClankaKernel, diffRuns, retry } from './index.js';
 
-test('core-runtime exports kernel + diff utils', async () => {
+test('core-runtime exports kernel, diff, config, and retry', async () => {
   const kernel = new ClankaKernel('pkg-runtime-smoke');
   await kernel.log('run.start', 'test', {});
   const history = kernel.getHistory();

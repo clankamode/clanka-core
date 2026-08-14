@@ -97,6 +97,68 @@ test('loadConfig reports missing required values and keeps optional fields optio
   );
 });
 
+test('loadConfig honors envMap overrides instead of prefix-derived names', () => {
+  const config = loadConfig({
+    schema: z.object({
+      apiKey: z.string(),
+      region: z.string(),
+    }),
+    envPrefix: 'APP_',
+    envMap: {
+      apiKey: 'SECRET_KEY',
+    },
+    env: {
+      SECRET_KEY: 's3cret',
+      APP_REGION: 'us-west',
+      APP_API_KEY: 'ignored-because-mapped',
+    },
+  });
+
+  assert.deepEqual(config, {
+    apiKey: 's3cret',
+    region: 'us-west',
+  });
+});
+
+test('loadConfig rejects unknown config object keys when the schema is strict', () => {
+  assert.throws(
+    () => loadConfig({
+      schema: z.object({
+        port: z.number().int().positive(),
+      }).strict(),
+      config: {
+        port: 8080,
+        unexpected: true,
+      } as { port: number },
+      env: {},
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigValidationError);
+      assert.match(error.message, /Unrecognized config key\(s\): "unexpected"/);
+      assert.equal(error.issues[0]?.source, 'config');
+      return true;
+    },
+  );
+});
+
+test('loadConfig keeps unknown config keys when the schema uses passthrough', () => {
+  const config = loadConfig({
+    schema: z.object({
+      port: z.number().int().positive(),
+    }).passthrough(),
+    config: {
+      port: 8080,
+      label: 'kept',
+    } as { port: number },
+    env: {},
+  });
+
+  assert.deepEqual(config, {
+    port: 8080,
+    label: 'kept',
+  });
+});
+
 test('parseEnvFile supports quotes and inline comments', () => {
   const parsed = parseEnvFile([
     'APP_NAME="clanka core"',
