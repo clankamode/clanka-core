@@ -36,6 +36,34 @@ test('isHelpCommand recognizes help flags', async () => {
   }
 });
 
+test('cmdReplay empty run prints explicit message', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-replay-empty-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdReplay } = await import('./cli.js');
+
+    const lines: string[] = [];
+    const errors: string[] = [];
+    cmdReplay('empty', line => lines.push(line), line => errors.push(line));
+
+    assert.deepEqual(lines, []);
+    assert.deepEqual(errors, ['No events in run empty']);
+  } finally {
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('cmdLs empty runs dir prints explicit message', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-ls-empty-'));
   const priorCwd = process.cwd();
