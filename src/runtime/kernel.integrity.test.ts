@@ -103,3 +103,44 @@ test('verify: throws when history mixes multiple runIds', async () => {
   kernel.loadHistory([foreignEvent, linkedEvent]);
   assert.throws(() => kernel.verify(), /runId/);
 });
+
+test('verify: throws when event schema version is not 1.1', async () => {
+  const kernel = new ClankaKernel('run-version');
+  await kernel.log('run.start', 'agent', {});
+
+  const [event] = kernel.getHistory();
+  const wrongVersion = { ...event, v: 2 };
+  kernel.loadHistory([
+    { ...wrongVersion, id: recalcKernelEventId(wrongVersion as Record<string, unknown>) },
+  ]);
+
+  assert.throws(() => kernel.verify(), /version|v\b/i);
+});
+
+test('verify: throws when timestamp is not a finite number', async () => {
+  const kernel = new ClankaKernel('run-nan-ts');
+  await kernel.log('run.start', 'agent', {});
+
+  const [event] = kernel.getHistory();
+  const nanTs = { ...event, timestamp: Number.NaN };
+  kernel.loadHistory([
+    { ...nanTs, id: recalcKernelEventId(nanTs as Record<string, unknown>) },
+  ]);
+
+  assert.throws(() => kernel.verify(), /timestamp/i);
+});
+
+test('verify: throws when timestamps decrease', async () => {
+  const kernel = new ClankaKernel('run-ts-order');
+  await kernel.log('run.start', 'agent', {});
+  await kernel.log('run.end', 'agent', {});
+
+  const history = kernel.getHistory();
+  const earlier = { ...history[1], timestamp: history[0].timestamp - 1 };
+  kernel.loadHistory([
+    history[0],
+    { ...earlier, id: recalcKernelEventId(earlier as Record<string, unknown>) },
+  ]);
+
+  assert.throws(() => kernel.verify(), /timestamp/i);
+});

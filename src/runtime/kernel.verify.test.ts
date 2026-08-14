@@ -241,3 +241,26 @@ test('registerInvariant: multiple failing invariants all record against the same
   assert.equal(failures.every((event) => event.causes[0] === trigger.id), true);
   assert.equal(kernel.verify().valid, true);
 });
+
+test('registerInvariant: recording invariant.failed does not re-enter enforceInvariants', async () => {
+  const kernel = new ClankaKernel('run-no-reenter');
+  let checks = 0;
+  kernel.registerInvariant({
+    name: 'always_fail',
+    description: 'fails for every checked event',
+    async check() {
+      checks += 1;
+      assert.ok(checks <= 2, `enforceInvariants re-entered via invariant.failed (checks=${checks})`);
+      return { valid: false, message: 'nope', severity: 'error' };
+    },
+  });
+
+  const trigger = await kernel.log('boom', 'agent', {});
+  const history = kernel.getHistory();
+
+  assert.equal(checks, 1);
+  assert.equal(history.length, 2);
+  assert.equal(history[1].type, 'invariant.failed');
+  assert.deepEqual(history[1].causes, [trigger.id]);
+  assert.equal(kernel.verify().valid, true);
+});
