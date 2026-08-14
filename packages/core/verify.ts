@@ -38,10 +38,18 @@ export function workspaceHashFromState(fsState: FSState): string {
   return createHash('sha256').update(hashContent).digest('hex');
 }
 
+/**
+ * Standalone EventLog JSONL verifier (schema, digest, seq, causes, fs replay,
+ * workspaceHash, optional strict `run.commit`).
+ *
+ * Not wired into the published `clanka-core` CLI. `clanka-core verify` uses
+ * `kernel.verify()` (digest / seq / causes only) under `src/runtime`. This
+ * module is library-only inside `packages/core/` (not a workspace package).
+ */
 export async function verifyRun(runPath: string, options: { strict?: boolean } = {}) {
   const content = fs.readFileSync(runPath, 'utf-8');
   const lines = content.trim().split('\n').filter(l => l.length > 0);
-  
+
   const history: Event[] = [];
   const eventIds = new Set<string>();
   const idToSeq = new Map<string, number>();
@@ -64,7 +72,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     const recomputedDigest = createHash('sha256')
       .update(toCanonical(eventWithoutId))
       .digest('hex');
-      
+
     if (actualId !== recomputedDigest) {
       throw new Error(`Event ${event.seq} (id: ${actualId}) has invalid digest. Expected: ${recomputedDigest}`);
     }
@@ -91,7 +99,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     if (event.type === 'fs.diff') {
       const { txId, path: filePath, beforeDigest, afterDigest, size } = event.payload;
       if (!txId) throw new Error(`Event ${event.seq}: fs.diff missing txId`);
-      
+
       // Enforce no_file_collision within a txId
       if (!txTouchedPaths.has(txId)) txTouchedPaths.set(txId, new Set());
       const touched = txTouchedPaths.get(txId)!;
@@ -118,7 +126,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     if (event.type === 'fs.snapshot') {
       const { txId, files, workspaceHash } = event.payload;
       if (!txId) throw new Error(`Event ${event.seq}: fs.snapshot missing txId`);
-      
+
       // Verify files match state
       for (const file of files) {
         const state = fsState[file.path];
@@ -128,7 +136,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
       }
 
       const recomputedWorkspaceHash = workspaceHashFromState(fsState);
-      
+
       if (workspaceHash !== recomputedWorkspaceHash) {
         throw new Error(`Event ${event.seq}: workspaceHash mismatch. Log: ${workspaceHash}, Computed: ${recomputedWorkspaceHash}`);
       }

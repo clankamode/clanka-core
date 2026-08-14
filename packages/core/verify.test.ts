@@ -42,6 +42,13 @@ describe('toCanonical', () => {
 });
 
 describe('verifyRun digest integrity', () => {
+  test('module documents that it is not the published clanka-core verify path', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'verify.ts'), 'utf8');
+    assert.match(source, /Not wired into the published `clanka-core` CLI/);
+    assert.match(source, /kernel\.verify\(\)/);
+    assert.equal(source.includes('canonicalJSON'), true); // mentioned as insufficient
+  });
+
   test('accepts the repo golden run file', async () => {
     const goldenPath = path.resolve(__dirname, '../../runs/golden.jsonl');
     const result = await verifyRun(goldenPath, { strict: true });

@@ -2,23 +2,25 @@ import { Event } from './event.js';
 import { Invariant, InvariantResult } from './invariant.js';
 
 /**
- * ReplayHarness: deterministic inspection of an event log.
+ * ReplayHarness: normalize an in-memory event list and run invariants.
  *
- * Given a log, this harness:
- * - Deduplicates by event id (last-write-wins) and sorts for stable order
- * - Runs registered invariants against the normalized sequence
- * - Diffs two logs by full event equality (id, type, seq, payload, …)
+ * Behavior (nothing more):
+ * - Deduplicate by event id (last-write-wins)
+ * - Sort by timestamp, then type, then seq, then id
+ * - Evaluate registered invariants
+ * - Diff two logs by full event equality
  *
- * Tool/model mocks may be supplied for API compatibility with callers that
- * prepare them, but `replay()` does not invoke them. It does not re-execute
- * tools or models; it normalizes and verifies the recorded sequence.
+ * This is not tool/model re-execution. It does not load JSONL from disk.
+ * It is not the published `clanka-core replay` CLI path (that uses kernel history).
  */
 
+/** Retained only so existing type re-exports keep compiling. Not used by ReplayHarness. */
 export interface MockTool {
   name: string;
   simulate: (input: Record<string, any>) => Promise<Record<string, any>>;
 }
 
+/** Retained only so existing type re-exports keep compiling. Not used by ReplayHarness. */
 export interface MockModel {
   name: string;
   simulate: (prompt: string) => Promise<string>;
@@ -26,37 +28,33 @@ export interface MockModel {
 
 export interface ReplayConfig {
   events: Event[];
-  tools: Record<string, MockTool>;
-  models: Record<string, MockModel>;
   invariants: Invariant[];
+  /**
+   * Ignored. Accepted so older call sites that passed `tools: {}` still typecheck.
+   * ReplayHarness never invokes tool mocks.
+   */
+  tools?: Record<string, MockTool>;
+  /**
+   * Ignored. Accepted so older call sites that passed `models: {}` still typecheck.
+   * ReplayHarness never invokes model mocks.
+   */
+  models?: Record<string, MockModel>;
 }
 
 export class ReplayHarness {
   private events: Event[];
-  private tools: Record<string, MockTool>;
-  private models: Record<string, MockModel>;
   private invariants: Invariant[];
   private runId: string;
 
   constructor(config: ReplayConfig) {
     this.events = config.events;
-    this.tools = config.tools;
-    this.models = config.models;
     this.invariants = config.invariants;
     this.runId = this.events[0]?.runId || 'unknown';
-  }
-
-  /** Exposed for tests/diagnostics: mocks are retained but not called by replay(). */
-  public get registeredTools(): Readonly<Record<string, MockTool>> {
-    return this.tools;
-  }
-
-  public get registeredModels(): Readonly<Record<string, MockModel>> {
-    return this.models;
+    // config.tools / config.models are intentionally unread.
   }
 
   private normalizeEvents(events: Event[]): Event[] {
-    // Keep the last copy for duplicate IDs so replay is deterministic.
+    // Keep the last copy for duplicate IDs so ordering is deterministic.
     const lastById = new Map<string, Event>();
     for (const event of events) {
       lastById.set(event.id, event);
@@ -78,7 +76,6 @@ export class ReplayHarness {
 
   /**
    * Normalize the log and evaluate invariants.
-   * Does not call tool/model mocks.
    */
   public async replay(): Promise<{
     success: boolean;
@@ -103,8 +100,7 @@ export class ReplayHarness {
   }
 
   /**
-   * Diff: Compare two event logs for full equality of each event.
-   * Diverges on the first index where events differ (any field), or on length mismatch.
+   * Diff two event logs by full equality of each event (not id-only).
    */
   public static diff(log1: Event[], log2: Event[]): {
     identical: boolean;
@@ -112,7 +108,7 @@ export class ReplayHarness {
     summary: string;
   } {
     const minLen = Math.min(log1.length, log2.length);
-    
+
     for (let i = 0; i < minLen; i++) {
       if (!eventsEqual(log1[i], log2[i])) {
         return {
@@ -122,7 +118,7 @@ export class ReplayHarness {
         };
       }
     }
-    
+
     if (log1.length !== log2.length) {
       return {
         identical: false,
@@ -130,7 +126,7 @@ export class ReplayHarness {
         summary: `Log length mismatch: ${log1.length} vs ${log2.length}`,
       };
     }
-    
+
     return {
       identical: true,
       summary: 'Logs are identical',
