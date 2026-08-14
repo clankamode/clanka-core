@@ -1,5 +1,7 @@
 # Task: Fix tests, wire replay CLI command, and clean up packages/core
 
+> **Archive:** Completed March 2026 prompt for the replay/vitest exec plan. Not the current open backlog — see `TASKS.md`.
+
 ## Goal
 `clanka-core` has a broken test suite (mixed node:test + vitest test runners causing failures)
 and a partially-built `packages/core/` sub-package that never got wired to the CLI.

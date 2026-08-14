@@ -28,5 +28,5 @@ Never commit to main.
 ## At completion
 Write the Outcomes & Retrospective section in PLAN.md.
 Run `npx vitest run` one final time and include the passing test count in the retrospective.
-EOF
-echo "IMPLEMENT.md written"
+
+> **Historical note:** This runbook and `docs/PLAN.md` / `docs/PROMPT.md` document a completed March 2026 exec plan (replay CLI + vitest fixes). They are retained as archive context, not as the current open task list. See `TASKS.md` for present status.

@@ -3,29 +3,34 @@
 _Generated from `git log --oneline --no-merges` (latest 20 entries)._
 
 ## Features
-- `b687547` feat(core): npm publish config, CONTRACT.md, CI publish job (#10)
-- `51a2688` feat(core): add diff command for comparing run event sequences (#2)
-- `3be0aa2` feat(core): add CLI entrypoint with run/log/verify/ls/export commands
-- `2051295` feat: align with DAR v1.1, fix verification, and add golden run
-- `77df432` feat: real verification, DAR v1.1 alignment, and artifact purging
-- `0463198` feat: DAR Spec v1.1 dogfood — first deterministic trace recorded
+- _none_
 
 ## Fixes
-- `6f38da1` fix: clean up event schema exports, fix event.digest TS errors
+- `8c0fb01` fix(cli): honest empty replay instead of silent success (#82)
+- `c456f28` fix(npm): honest package description; drop phantom examples dir (#81)
+- `4329d8a` fix(cli): refuse silent overwrite on run without --force
+- `d41e233` fix(cli): honest empty ls, help flags, and verify failure reasons (#77)
+- `b38f028` fix(tsconfig): silence TS 6 moduleResolution deprecation, include node types (#69)
 
 ## Chores
-- `24ef326` chore(core): npm publish config, CONTRACT.md, CI publish job (#9)
-- `f99c81e` chore: move scratch files to examples/ (#7)
-- `50f016a` chore: add TASKS.md with agent work plan
-- `f8a5bf3` chore: add .gitignore and remove build artifacts from cache
+- `6f514de` chore: disable dependabot version updates
+- `cd3bf92` chore(deps-dev): bump the dependencies group with 2 updates (#76)
+- `aecc08f` chore(deps): bump the dependencies group with 2 updates (#75)
+- `912cd33` chore(deps): bump the dependencies group across 1 directory with 3 updates (#74)
+- `9311a73` chore: cleanup, split tests, bump deps, add diff coverage (#71)
+- `7c686fd` chore(deps-dev): bump vite from 8.0.3 to 8.0.5 (#68)
+- `f070bd0` chore(deps-dev): bump the dependencies group across 1 directory with 2 updates (#70)
+- `9dccb99` chore(deps-dev): bump the dependencies group with 2 updates (#66)
+- `77bdc92` chore(deps-dev): bump picomatch from 4.0.3 to 4.0.4 (#65)
+- `8cf24df` chore(deps-dev): bump the dependencies group with 2 updates (#63)
+- `83ef365` chore: bump CI node version to 24 (#64)
 
 ## Tests
-- `377f528` test: expand runtime kernel test coverage (ordering, replay, isolation) (#8)
-- `0afeb30` test: add runtime kernel tests — ordering, replay, zod, isolation (7 tests) (#5)
-- `48054d3` test: add diff.ts coverage (#6)
-- `da7f7d1` test(runtime): add kernel.test.ts with 24 tests for toCanonical, ordering, replay, and tamper detection (#4)
+- _none_
 
 ## Other
-- `b295048` test+docs: runtime tests, CONTRACT.md event schema (#11)
-- `4fde350` docs: add README (#3)
+- `f6b7de9` docs: call out run.start vs run.started naming split
+- `1f1b35c` docs: align README and TASKS with real CLI export behavior
+- `f0193f1` docs: add missing CLI commands to README (closes #49)
+- `75bee47` docs: add event schema reference (closes #46)
 

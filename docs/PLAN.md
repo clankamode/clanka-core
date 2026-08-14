@@ -1,5 +1,7 @@
 # ExecPlan: Fix test suite + add replay CLI command
 
+> **Archive:** Completed March 2026 exec plan. Not the current open backlog — see `TASKS.md`.
+
 ## Purpose
 
 `clanka-core` has a broken test suite caused by two test runners being mixed — some files use
