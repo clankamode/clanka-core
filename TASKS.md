@@ -1,6 +1,8 @@
 # TASKS.md — clanka-core
 > Last updated: 2026-08-14 | Status: mostly complete — npm registry publish still open
 
+Historical March 2026 items below are marked against **current** code. The vitest/`node:test` mix and unwired CLI `replay` called out in archived `docs/PLAN.md` are **already fixed** (see checked items). Do not re-open them.
+
 ## 🔴 High Priority
 - [x] **Expand test coverage for `runtime/`** — add tests for: event ordering invariants, replay determinism, invalid event payloads (zod rejection), concurrent run isolation
 - [x] **Document the event schema** — ensure `CONTRACT.md` covers every event type with required/optional fields and example payloads
