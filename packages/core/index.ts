@@ -28,8 +28,24 @@ export type { EventStoreQuery } from './event-store.js';
 export { ReplayHarness } from './replay.js';
 export type { MockModel, MockTool, ReplayConfig } from './replay.js';
 
-export { ClankaKernel } from './kernel.js';
-export type { KernelConfig } from './kernel.js';
+// Operator kernel: the runtime ClankaKernel (verify / serialize / fromJSONL).
+// packages/core/kernel.ts is the EventLog-typed companion — do not export it
+// under the same name; that fork previously lied about digest integrity and
+// was missing verify/replay APIs that operators expect from ClankaKernel.
+export { ClankaKernel, toCanonical } from '../../src/runtime/kernel.js';
+export type {
+  CognitiveEvent,
+  VerifyResult,
+} from '../../src/runtime/kernel.js';
+
+export {
+  ClankaKernel as EventLogKernel,
+  toCanonical as eventLogToCanonical,
+} from './kernel.js';
+export type {
+  KernelConfig as EventLogKernelConfig,
+  VerifyResult as EventLogVerifyResult,
+} from './kernel.js';
 
 export { verifyRun } from './verify.js';
 

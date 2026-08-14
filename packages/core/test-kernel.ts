@@ -1,8 +1,8 @@
-import { ClankaKernel } from './kernel.js';
+import { EventLogKernel } from './index.js';
 import { invariant_planBeforeAction } from './invariant.js';
 
 async function test() {
-  const kernel = new ClankaKernel('test-run-' + Date.now());
+  const kernel = new EventLogKernel('test-run-' + Date.now());
   kernel.registerInvariant(invariant_planBeforeAction());
   
   console.log('--- Case 1: Valid flow (Decision -> Tool with causal link) ---');
@@ -12,6 +12,7 @@ async function test() {
   const history1 = kernel.getHistory();
   const violations1 = history1.filter(e => e.type === 'invariant.failed');
   console.log('Violations:', violations1.length);
+  console.log('verify:', kernel.verify());
 
   console.log('\n--- Case 2: Invalid flow (Tool without Decision in causes) ---');
   await kernel.log('tool.requested', { command: 'rm -rf /' }, { agentId: 'rogue-agent', tool: 'exec' });
@@ -22,6 +23,7 @@ async function test() {
   if (violations2.length > 0) {
     console.log('Message:', violations2[0].payload.message);
   }
+  console.log('verify:', kernel.verify());
 }
 
 test().catch(console.error);
