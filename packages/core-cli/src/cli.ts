@@ -17,6 +17,9 @@ export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('  export <runId> [--format json|markdown]');
   writeLine('  diff <runId1> <runId2> [--json]');
   writeLine('  help | --help | -h');
+  writeLine('Notes:');
+  writeLine('  verify/ls PASS|FAIL = digest, seq, causes only');
+  writeLine('  (not EventLog schema, fs snapshot, or workspaceHash checks)');
 }
 
 export function isHelpCommand(command: string | undefined): boolean {
@@ -159,8 +162,11 @@ function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
   }
 }
 
-function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
-  const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
+function eventsBySeq(kernel: ClankaKernel) {
+  return kernel.getHistory().sort((a, b) => a.seq - b.seq);
+}
+
+function formatExportMarkdown(runId: string, events: ReturnType<ClankaKernel['getHistory']>): string {
   const lines = [`# Run Export: ${runId}`, '', `Total events: ${events.length}`, ''];
 
   for (const event of events) {
@@ -172,15 +178,22 @@ function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
   return lines.join('\n') + '\n';
 }
 
-export function cmdExport(runId: string, format: 'json' | 'markdown' = 'json') {
+export function cmdExport(
+  runId: string,
+  format: 'json' | 'markdown' = 'json',
+  write: (chunk: string) => void = chunk => {
+    process.stdout.write(chunk);
+  },
+) {
   const kernel = loadRun(runId);
+  const events = eventsBySeq(kernel);
 
   if (format === 'markdown') {
-    process.stdout.write(formatExportMarkdown(runId, kernel));
+    write(formatExportMarkdown(runId, events));
     return;
   }
 
-  process.stdout.write(JSON.stringify(kernel.getHistory(), null, 2) + '\n');
+  write(JSON.stringify(events, null, 2) + '\n');
 }
 
 function isOption(arg: string): boolean {

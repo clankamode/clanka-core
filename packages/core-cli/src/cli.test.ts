@@ -242,3 +242,85 @@ test('runCli rejects unknown options that used to be silently ignored', async ()
     else process.env.CLANKA_CORE_CLI_TEST = prior;
   }
 });
+
+test('cmdExport json and markdown both order events by seq', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-export-seq-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempRoot, 'runs', 'oob.jsonl'),
+      [
+        JSON.stringify({
+          v: 1.1,
+          runId: 'oob',
+          seq: 1,
+          type: 'later',
+          timestamp: 2000,
+          causes: [],
+          payload: { n: 2 },
+          meta: { agentId: 't' },
+          id: 'bbbb',
+        }),
+        JSON.stringify({
+          v: 1.1,
+          runId: 'oob',
+          seq: 0,
+          type: 'earlier',
+          timestamp: 1000,
+          causes: [],
+          payload: { n: 1 },
+          meta: { agentId: 't' },
+          id: 'aaaa',
+        }),
+      ].join('\n') + '\n',
+      'utf-8',
+    );
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdExport } = await import('./cli.js');
+
+    let jsonOut = '';
+    cmdExport('oob', 'json', chunk => {
+      jsonOut += chunk;
+    });
+    const jsonEvents = JSON.parse(jsonOut);
+    assert.deepEqual(
+      jsonEvents.map((event: { seq: number; type: string }) => `${event.seq}:${event.type}`),
+      ['0:earlier', '1:later'],
+    );
+
+    let mdOut = '';
+    cmdExport('oob', 'markdown', chunk => {
+      mdOut += chunk;
+    });
+    assert.match(mdOut, /- \[0\] earlier[\s\S]*- \[1\] later/);
+  } finally {
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('usage states verify scope is digest/seq/causes only', async () => {
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+
+  try {
+    vi.resetModules();
+    const { usage } = await import('./cli.js');
+    const lines: string[] = [];
+    usage(line => lines.push(line));
+    const text = lines.join('\n');
+    assert.match(text, /digest, seq, causes only/);
+    assert.match(text, /not EventLog schema, fs snapshot, or workspaceHash/);
+  } finally {
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+  }
+});
