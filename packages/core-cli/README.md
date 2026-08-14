@@ -16,4 +16,6 @@ clanka-core diff <runId1> <runId2> [--json]
 ## Operator notes
 - Runs are stored as JSONL under `runs/<runId>.jsonl`.
 - `export` (default `--format json`) prints a pretty-printed JSON **array** of events, not the raw JSONL file contents.
+- `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error.
+- Unknown options and unexpected extra arguments are rejected (not silently ignored).
 - `ls` lists local runs with verify status (`PASS` / `FAIL`).
