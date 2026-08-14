@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 /**
  * DAR Spec v1.1 - The Atomic Event Schema
+ *
+ * Strict payload contracts (see CONTRACT.md "Strict payload matrix").
+ * Distinct from the looser EventLog schema in `event.ts`.
  */
 
 export const FSSnapshotSchema = z.object({
@@ -48,16 +51,61 @@ export const ToolResponseSchema = z.object({
   exitCode: z.number().optional()
 });
 
+export const RunStartedPayloadSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+});
+
+export const RunFinishedPayloadSchema = z.object({
+  status: z.enum(['success', 'failed', 'killed']),
+  commitHash: z.string().optional(),
+});
+
+export const DecisionMadePayloadSchema = z.object({
+  rationale: z.string(),
+  plan: z.array(z.string()),
+});
+
+export const InvariantFailedPayloadSchema = z.object({
+  invariant: z.string(),
+  message: z.string(),
+  severity: z.enum(['warn', 'error', 'fatal']),
+});
+
+export const ErrorRaisedPayloadSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** Payload schemas for every type in the CONTRACT.md strict matrix. */
+export const StrictPayloadSchemas = {
+  'run.started': RunStartedPayloadSchema,
+  'run.finished': RunFinishedPayloadSchema,
+  'decision.made': DecisionMadePayloadSchema,
+  'tool.requested': ToolRequestSchema,
+  'tool.responded': ToolResponseSchema,
+  'fs.diff': FSDiffSchema,
+  'fs.snapshot': FSSnapshotSchema,
+  'invariant.failed': InvariantFailedPayloadSchema,
+  'error.raised': ErrorRaisedPayloadSchema,
+} as const;
+
+export type StrictEventType = keyof typeof StrictPayloadSchemas;
+
+export const StrictEventTypeSchema = z.enum(
+  Object.keys(StrictPayloadSchemas) as [StrictEventType, ...StrictEventType[]],
+);
+
 export const EventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('run.started'), payload: z.object({ name: z.string(), version: z.string() }) }),
-  z.object({ type: z.literal('run.finished'), payload: z.object({ status: z.enum(['success', 'failed', 'killed']), commitHash: z.string().optional() }) }),
-  z.object({ type: z.literal('decision.made'), payload: z.object({ rationale: z.string(), plan: z.array(z.string()) }) }),
+  z.object({ type: z.literal('run.started'), payload: RunStartedPayloadSchema }),
+  z.object({ type: z.literal('run.finished'), payload: RunFinishedPayloadSchema }),
+  z.object({ type: z.literal('decision.made'), payload: DecisionMadePayloadSchema }),
   z.object({ type: z.literal('tool.requested'), payload: ToolRequestSchema }),
   z.object({ type: z.literal('tool.responded'), payload: ToolResponseSchema }),
   z.object({ type: z.literal('fs.diff'), payload: FSDiffSchema }),
   z.object({ type: z.literal('fs.snapshot'), payload: FSSnapshotSchema }),
-  z.object({ type: z.literal('invariant.failed'), payload: z.object({ invariant: z.string(), message: z.string(), severity: z.enum(['warn', 'error', 'fatal']) }) }),
-  z.object({ type: z.literal('error.raised'), payload: z.object({ code: z.string(), message: z.string() }) }),
+  z.object({ type: z.literal('invariant.failed'), payload: InvariantFailedPayloadSchema }),
+  z.object({ type: z.literal('error.raised'), payload: ErrorRaisedPayloadSchema }),
 ]).and(z.object({
   v: z.literal(1.1),
   id: z.string(),               // The SHA256 Digest (Identity)

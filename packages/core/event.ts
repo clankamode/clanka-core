@@ -75,20 +75,21 @@ export function createEvent(
   payload: Record<string, any>,
   causes: string[] = []
 ): Event {
+  const parsedType = EventTypeSchema.parse(type);
   const timestamp = Date.now();
-  
+
   const eventData: any = {
     v,
     runId,
     seq,
-    type,
+    type: parsedType,
     timestamp,
     causes,
     payload,
   };
-  
+
   const id = contentDigest(eventData);
-  
+
   return {
     ...eventData,
     id,
