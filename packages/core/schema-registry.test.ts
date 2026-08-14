@@ -137,10 +137,14 @@ describe('SchemaRegistry', () => {
       () => registry.register('totally.fake', z.object({})),
       /Invalid/,
     );
-    assert.throws(
-      () => registry.register('run.start', z.object({})),
-      /Invalid/,
-    );
+  });
+
+  test('register accepts CLI run.start as an EventLog type', () => {
+    const registry = new SchemaRegistry();
+    registry.register('run.start', z.object({}).passthrough());
+
+    const parsed = registry.validate(makeEvent({ type: 'run.start', payload: {} }));
+    assert.equal(parsed.type, 'run.start');
   });
 
   test('validate rejects unknown event types instead of storing them', () => {
@@ -168,6 +172,7 @@ describe('SchemaRegistry', () => {
       'model.responded',
       'run.commit',
       'run.finished',
+      'run.start',
       'run.started',
       'tool.requested',
       'tool.responded',
@@ -177,6 +182,9 @@ describe('SchemaRegistry', () => {
       makeEvent({ type: 'budget.exhausted', payload: { budget: 'tokens', remaining: 0 } }),
     );
     assert.equal(parsed.type, 'budget.exhausted');
+
+    const cliStart = registry.validate(makeEvent({ type: 'run.start', payload: {} }));
+    assert.equal(cliStart.type, 'run.start');
   });
 
   test('forEventLog does not accept error.raised without explicit registration', () => {

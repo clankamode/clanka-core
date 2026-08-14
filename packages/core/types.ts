@@ -96,7 +96,11 @@ export const StrictEventTypeSchema = z.enum(
   Object.keys(StrictPayloadSchemas) as [StrictEventType, ...StrictEventType[]],
 );
 
-export const EventSchema = z.discriminatedUnion('type', [
+/**
+ * Strict DAR v1.1 discriminated union (CONTRACT.md strict matrix).
+ * Named distinctly from EventLog `EventSchema` in `event.ts` (what index exports).
+ */
+export const StrictEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('run.started'), payload: RunStartedPayloadSchema }),
   z.object({ type: z.literal('run.finished'), payload: RunFinishedPayloadSchema }),
   z.object({ type: z.literal('decision.made'), payload: DecisionMadePayloadSchema }),
@@ -118,4 +122,5 @@ export const EventSchema = z.discriminatedUnion('type', [
   }).optional()
 }));
 
-export type Event = z.infer<typeof EventSchema>;
+export type StrictEvent = z.infer<typeof StrictEventSchema>;
+

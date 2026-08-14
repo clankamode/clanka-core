@@ -22,19 +22,10 @@ export const invariant_planBeforeAction = (): Invariant => ({
   description: 'All tool requests must include a decision in causes[].',
   check: async (ctx) => {
     const { events } = ctx;
-
-    // Kernel re-logs `invariant.failed` after a violation and re-runs checks.
-    // If the newest event is already our failure record, do not re-fire.
-    const lastEvent = events[events.length - 1];
-    if (
-      lastEvent?.type === 'invariant.failed' &&
-      lastEvent.payload?.invariant === 'plan_before_action'
-    ) {
-      return { valid: true, severity: 'warn' };
-    }
-
     const eventsById = new Map(events.map(event => [event.id, event]));
 
+    // Kernel re-logs `invariant.failed` after a violation and re-runs checks.
+    // Skip tool requests already attributed to a recorded failure for this rule.
     const alreadyReportedToolIds = new Set(
       events
         .filter(

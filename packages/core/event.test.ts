@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import {
   EventSchema,
   EventTypeSchema,
+  canonicalJSON,
+  contentDigest,
   createEvent,
 } from './event';
 
 describe('EventTypeSchema / createEvent', () => {
-  test('EventTypeSchema accepts every CONTRACT EventLog type', () => {
+  test('EventTypeSchema accepts EventLog types including CLI run.start', () => {
     const expected = [
+      'run.start',
       'run.started',
       'run.finished',
       'run.commit',
@@ -35,7 +38,19 @@ describe('EventTypeSchema / createEvent', () => {
   test('EventTypeSchema rejects unknown event types', () => {
     assert.equal(EventTypeSchema.safeParse('totally.fake').success, false);
     assert.equal(EventTypeSchema.safeParse('error.raised').success, false);
-    assert.equal(EventTypeSchema.safeParse('run.start').success, false);
+  });
+
+  test('EventSchema accepts CLI run.start events', () => {
+    const parsed = EventSchema.safeParse({
+      v: 1.1,
+      id: 'x',
+      runId: 'r',
+      seq: 0,
+      type: 'run.start',
+      timestamp: 1,
+      payload: {},
+    });
+    assert.equal(parsed.success, true);
   });
 
   test('EventSchema rejects unknown event types at runtime', () => {
@@ -58,9 +73,40 @@ describe('EventTypeSchema / createEvent', () => {
     );
   });
 
-  test('createEvent accepts a contracted EventLog type', () => {
-    const event = createEvent(1.1, 'run.commit', 'run-1', 0, { commitHash: 'abc' });
-    assert.equal(event.type, 'run.commit');
-    assert.equal(EventSchema.safeParse(event).success, true);
+  test('createEvent accepts CLI run.start and contracted EventLog types', () => {
+    const start = createEvent(1.1, 'run.start', 'run-1', 0, {});
+    assert.equal(start.type, 'run.start');
+    assert.equal(EventSchema.safeParse(start).success, true);
+
+    const commit = createEvent(1.1, 'run.commit', 'run-1', 1, { commitHash: 'abc' });
+    assert.equal(commit.type, 'run.commit');
+    assert.equal(EventSchema.safeParse(commit).success, true);
+  });
+});
+
+describe('canonicalJSON', () => {
+  test('recursively sorts nested object keys (not shallow top-level only)', () => {
+    const a = { b: 1, a: { y: 1, x: 2 } };
+    const b = { a: { x: 2, y: 1 }, b: 1 };
+
+    assert.equal(canonicalJSON(a), '{"a":{"x":2,"y":1},"b":1}');
+    assert.equal(canonicalJSON(a), canonicalJSON(b));
+  });
+
+  test('preserves array element order while canonicalizing nested objects', () => {
+    assert.equal(
+      canonicalJSON([null, 1, 'two', { b: 2, a: 1 }]),
+      '[null,1,"two",{"a":1,"b":2}]',
+    );
+  });
+
+  test('omits undefined object values', () => {
+    assert.equal(canonicalJSON({ a: 1, b: undefined, c: 3 }), '{"a":1,"c":3}');
+  });
+
+  test('contentDigest is stable across nested key insertion order', () => {
+    const left = { payload: { z: 1, nested: { b: 2, a: 1 } }, type: 'run.start' };
+    const right = { type: 'run.start', payload: { nested: { a: 1, b: 2 }, z: 1 } };
+    assert.equal(contentDigest(left), contentDigest(right));
   });
 });

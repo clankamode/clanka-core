@@ -104,6 +104,42 @@ describe('invariant_planBeforeAction', () => {
     assert.equal(result.valid, true);
   });
 
+  test('still fails when last event is invariant.failed but an earlier tool was never reported', async () => {
+    const invariant = invariant_planBeforeAction();
+    const badTool1 = withId(
+      createEvent(1.1, 'tool.requested', 'run-1', 0, { tool: 'bash' }, []),
+      'tool-bad-1',
+    );
+    const badTool2 = withId(
+      createEvent(1.1, 'tool.requested', 'run-1', 1, { tool: 'rm' }, []),
+      'tool-bad-2',
+    );
+    const failureForSecond = withId(
+      createEvent(
+        1.1,
+        'invariant.failed',
+        'run-1',
+        2,
+        {
+          invariant: 'plan_before_action',
+          message: 'recorded t2 only',
+          severity: 'error',
+          triggerEventId: 'tool-bad-2',
+        },
+        ['tool-bad-2'],
+      ),
+      'fail-2',
+    );
+
+    const result = await invariant.check({
+      events: [badTool1, badTool2, failureForSecond],
+      runId: 'run-1',
+    });
+
+    assert.equal(result.valid, false);
+    assert.match(result.message || '', /tool-bad-1/);
+  });
+
   test('still fails later when a prior failure was recorded but another tool lacks a decision', async () => {
     const invariant = invariant_planBeforeAction();
     const badTool1 = withId(

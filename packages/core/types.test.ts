@@ -1,7 +1,7 @@
 import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
-  EventSchema,
+  StrictEventSchema,
   StrictEventTypeSchema,
   StrictPayloadSchemas,
 } from './types';
@@ -18,7 +18,7 @@ function envelope(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('types.ts strict EventSchema (CONTRACT.md)', () => {
+describe('types.ts StrictEventSchema (CONTRACT.md strict matrix)', () => {
   test('StrictEventTypeSchema matches the CONTRACT strict matrix', () => {
     const expected = [
       'run.started',
@@ -38,6 +38,14 @@ describe('types.ts strict EventSchema (CONTRACT.md)', () => {
     }
     assert.equal(StrictEventTypeSchema.safeParse('run.commit').success, false);
     assert.equal(StrictEventTypeSchema.safeParse('budget.exhausted').success, false);
+    assert.equal(StrictEventTypeSchema.safeParse('run.start').success, false);
+  });
+
+  test('is a distinct schema from EventLog EventSchema (rejects CLI run.start)', () => {
+    const parsed = StrictEventSchema.safeParse(
+      envelope({ type: 'run.start', payload: {} }),
+    );
+    assert.equal(parsed.success, false);
   });
 
   test('accepts CONTRACT example payloads for each strict type', () => {
@@ -92,7 +100,7 @@ describe('types.ts strict EventSchema (CONTRACT.md)', () => {
     ];
 
     for (const example of examples) {
-      const parsed = EventSchema.safeParse(envelope(example));
+      const parsed = StrictEventSchema.safeParse(envelope(example));
       assert.equal(parsed.success, true, `expected ${example.type} to parse`);
     }
   });
@@ -111,13 +119,13 @@ describe('types.ts strict EventSchema (CONTRACT.md)', () => {
     ];
 
     for (const example of cases) {
-      const parsed = EventSchema.safeParse(envelope(example));
+      const parsed = StrictEventSchema.safeParse(envelope(example));
       assert.equal(parsed.success, false, `expected ${example.type} to reject`);
     }
   });
 
   test('rejects EventLog-only types that are outside the strict union', () => {
-    const parsed = EventSchema.safeParse(
+    const parsed = StrictEventSchema.safeParse(
       envelope({ type: 'run.commit', payload: { commitHash: 'abc' } }),
     );
     assert.equal(parsed.success, false);
@@ -133,8 +141,8 @@ describe('types.ts strict EventSchema (CONTRACT.md)', () => {
       timestamp: 1,
     };
 
-    assert.equal(EventSchema.safeParse({ ...base, v: 1.0, causes: [] }).success, false);
-    assert.equal(EventSchema.safeParse({ ...base, v: 1.1 }).success, false);
-    assert.equal(EventSchema.safeParse({ ...base, v: 1.1, causes: [] }).success, true);
+    assert.equal(StrictEventSchema.safeParse({ ...base, v: 1.0, causes: [] }).success, false);
+    assert.equal(StrictEventSchema.safeParse({ ...base, v: 1.1 }).success, false);
+    assert.equal(StrictEventSchema.safeParse({ ...base, v: 1.1, causes: [] }).success, true);
   });
 });

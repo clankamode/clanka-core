@@ -11,6 +11,8 @@ import { z } from 'zod';
  */
 
 export const EventTypeSchema = z.enum([
+  // CLI / ClankaKernel startup label (distinct from DAR `run.started`)
+  'run.start',
   'run.started',
   'run.finished',
   'run.commit',
@@ -29,6 +31,7 @@ export const EventTypeSchema = z.enum([
 
 export type EventType = z.infer<typeof EventTypeSchema>;
 
+/** EventLog envelope schema (loose payloads). Not the strict DAR union in `types.ts`. */
 export const EventSchema = z.object({
   v: z.number().describe('Schema version'),
   id: z.string().describe('Digest ID'),
@@ -49,11 +52,20 @@ export type Event = z.infer<typeof EventSchema>;
 
 /**
  * Canonical JSON serialization for consistent hashing.
- * - Sorted keys
- * - No whitespace
+ * Recursively sorts object keys (same contract as runtime `toCanonical`).
  */
 export function canonicalJSON(obj: any): string {
-  return JSON.stringify(obj, Object.keys(obj).sort());
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => canonicalJSON(item)).join(',') + ']';
+  }
+  const sortedKeys = Object.keys(obj).filter(key => obj[key] !== undefined).sort();
+  const parts = sortedKeys.map(
+    key => JSON.stringify(key) + ':' + canonicalJSON(obj[key]),
+  );
+  return '{' + parts.join(',') + '}';
 }
 
 /**
