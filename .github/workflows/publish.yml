@@ -19,7 +19,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Need enough history for version comparison and changelog generation.
+          fetch-depth: 0
 
       - name: Detect version change
         id: version_check
@@ -38,6 +39,10 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Skip publish (version unchanged)
+        if: steps.version_check.outputs.changed != 'true'
+        run: echo "package.json version unchanged; skipping publish."
+
       - name: Setup Node 24
         if: steps.version_check.outputs.changed == 'true'
         uses: actions/setup-node@v4
@@ -48,6 +53,10 @@ jobs:
       - name: Install dependencies
         if: steps.version_check.outputs.changed == 'true'
         run: npm ci
+
+      - name: Generate changelog for published tarball
+        if: steps.version_check.outputs.changed == 'true'
+        run: npm run changelog
 
       - name: Publish to npm
         if: steps.version_check.outputs.changed == 'true' && secrets.NPM_TOKEN != ''

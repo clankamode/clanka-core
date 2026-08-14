@@ -7,8 +7,30 @@ import { diffRuns, formatDiffMarkdown } from './diff.js';
 
 const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 
+/** Published npm package that owns the `clanka-core` bin (`package.json` name). */
+export const PUBLISHED_PACKAGE_NAME = '@clankamode/core';
+
+/** Bin name declared in root `package.json` and documented in README. */
+export const PUBLISHED_BIN_NAME = 'clanka-core';
+
+/**
+ * Root CLI command surface shipped as `dist/cli.js` for `@clankamode/core`.
+ * Kept here (not only under packages/core-cli) because the published root
+ * package bin points at this compile target.
+ */
+export const CLI_COMMANDS = [
+  'run',
+  'log',
+  'replay',
+  'verify',
+  'ls',
+  'export',
+  'diff',
+] as const;
+
 export function usage(writeLine: (line: string) => void = console.log) {
-  writeLine('Usage: clanka-core <command> [args]');
+  writeLine(`Usage: ${PUBLISHED_BIN_NAME} <command> [args]`);
+  writeLine(`Package: ${PUBLISHED_PACKAGE_NAME}`);
   writeLine('Commands:');
   writeLine('  run <runId> [--force]');
   writeLine('  log <runId> <type> <payload-json>');

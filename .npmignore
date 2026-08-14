@@ -1,6 +1,6 @@
 src/
-tests/
 **/*.test.ts
 TASKS.md
 *.md
 !README.md
+!CHANGELOG.md

@@ -1,10 +1,21 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { createRequire } from 'node:module';
 import { diffRuns, formatDiffMarkdown } from './diff';
 import { ClankaKernel, type CognitiveEvent } from './runtime/kernel';
+
+const require = createRequire(import.meta.url);
+const rootPackage = require('../package.json') as {
+  name: string;
+  main: string;
+  bin: Record<string, string>;
+  files: string[];
+  scripts: Record<string, string>;
+};
 
 function makeEvent(overrides: Partial<CognitiveEvent> & { seq: number; type: string }): CognitiveEvent {
   return {
@@ -462,5 +473,78 @@ test('cmdRun refuses to overwrite an existing run without --force', async () => 
       process.env.CLANKA_CORE_CLI_TEST = priorEnv;
     }
     fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('root package publish surface matches README CLI claims', async () => {
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+  vi.resetModules();
+  const {
+    CLI_COMMANDS,
+    PUBLISHED_BIN_NAME,
+    PUBLISHED_PACKAGE_NAME,
+    usage,
+  } = await import('./cli');
+
+  assert.equal(rootPackage.name, PUBLISHED_PACKAGE_NAME);
+  assert.equal(rootPackage.bin[PUBLISHED_BIN_NAME], 'dist/cli.js');
+  assert.equal(rootPackage.main, 'dist/runtime/kernel.js');
+  assert.deepEqual(rootPackage.files.slice().sort(), ['CHANGELOG.md', 'README.md', 'dist']);
+  assert.match(rootPackage.scripts.changelog, /gen-changelog\.sh/);
+  assert.match(rootPackage.scripts['test:packages'], /@clankamode\/core-runtime/);
+  assert.match(rootPackage.scripts['test:packages'], /@clankamode\/core-cli/);
+
+  assert.deepEqual([...CLI_COMMANDS], [
+    'run',
+    'log',
+    'replay',
+    'verify',
+    'ls',
+    'export',
+    'diff',
+  ]);
+
+  const lines: string[] = [];
+  usage(line => lines.push(line));
+  const text = lines.join('\n');
+  assert.match(text, new RegExp(`Usage: ${PUBLISHED_BIN_NAME} `));
+  assert.match(text, new RegExp(`Package: ${PUBLISHED_PACKAGE_NAME}`));
+  for (const command of CLI_COMMANDS) {
+    assert.match(text, new RegExp(`\\b${command}\\b`));
+  }
+
+  assert.equal(fs.existsSync(path.resolve(__dirname, '../scripts/gen-changelog.sh')), true);
+  assert.equal(fs.existsSync(path.resolve(__dirname, '../.npmignore')), true);
+  const npmignore = fs.readFileSync(path.resolve(__dirname, '../.npmignore'), 'utf8');
+  assert.match(npmignore, /^!CHANGELOG\.md$/m);
+  assert.doesNotMatch(npmignore, /^tests\/$/m);
+
+  if (priorEnv === undefined) {
+    delete process.env.CLANKA_CORE_CLI_TEST;
+  } else {
+    process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+  }
+});
+
+test('changelog script regenerates CHANGELOG.md from git history', () => {
+  const changelogPath = path.resolve(__dirname, '../CHANGELOG.md');
+  const previous = fs.readFileSync(changelogPath, 'utf8');
+
+  try {
+    const output = execFileSync('bash', ['scripts/gen-changelog.sh'], {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+    });
+    assert.match(output, /Wrote CHANGELOG\.md \(\d+ commits\)/);
+
+    const generated = fs.readFileSync(changelogPath, 'utf8');
+    assert.match(generated, /^# Changelog/m);
+    assert.match(generated, /_Generated from `git log --oneline --no-merges`/);
+    assert.match(generated, /^## Features/m);
+    assert.match(generated, /^## Fixes/m);
+    assert.notEqual(generated.trim(), '');
+  } finally {
+    fs.writeFileSync(changelogPath, previous, 'utf8');
   }
 });
