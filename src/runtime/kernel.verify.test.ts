@@ -40,7 +40,7 @@ test('verify: rejects forward causal references', async () => {
   const history = kernel.getHistory();
   const forwardLinked: Omit<CognitiveEvent, 'id'> = { ...history[1], causes: [history[2].id] };
 
-  const forwardKernel = new ClankaKernel('run-cause-forward-verify');
+  const forwardKernel = new ClankaKernel('run-cause-forward');
   forwardKernel.loadHistory([
     history[0],
     { ...forwardLinked, id: recalcKernelEventId(forwardLinked as Record<string, unknown>) },
@@ -152,9 +152,8 @@ test('registerInvariant: appends invariant.failed after a violating event with c
   kernel.registerInvariant({
     name: 'tool_requires_plan',
     description: 'tool.requested must be justified by a decision',
-    async check(ctx: { events: CognitiveEvent[] }) {
-      const last = ctx.events[ctx.events.length - 1];
-      if (last?.type === 'tool.requested') {
+    async check(ctx: { event: CognitiveEvent }) {
+      if (ctx.event.type === 'tool.requested') {
         return { valid: false, message: 'missing decision cause', severity: 'error' };
       }
       return { valid: true };
@@ -169,5 +168,99 @@ test('registerInvariant: appends invariant.failed after a violating event with c
   assert.equal(history[1].seq, 1);
   assert.deepEqual(history[1].causes, [trigger.id]);
   assert.equal(history[1].payload.invariant, 'tool_requires_plan');
+  assert.equal(kernel.verify().valid, true);
+});
+
+test('registerInvariant: concurrent async checks keep invariant.failed cause on the trigger', async () => {
+  const kernel = new ClankaKernel('run-invariant-race');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  kernel.registerInvariant({
+    name: 'slow_fail_on_bad',
+    description: 'fails on bad.event after an await gap',
+    async check(ctx: { event: CognitiveEvent }) {
+      if (ctx.event.type === 'bad.event') {
+        await gate;
+        return { valid: false, message: 'bad event', severity: 'error' };
+      }
+      return { valid: true };
+    },
+  });
+
+  const badPromise = kernel.log('bad.event', 'agent', { n: 1 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const okPromise = kernel.log('ok.event', 'agent', { n: 2 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  release();
+
+  const [badEvent] = await Promise.all([badPromise, okPromise]);
+  const history = kernel.getHistory();
+  const failure = history.find((event) => event.type === 'invariant.failed');
+
+  assert.ok(failure, 'expected invariant.failed event');
+  assert.deepEqual(failure.causes, [badEvent.id]);
+  assert.equal(kernel.verify().valid, true);
+});
+
+test('registerInvariant: multiple failing invariants all record against the same trigger', async () => {
+  const kernel = new ClankaKernel('run-multi-invariant');
+  kernel.registerInvariant({
+    name: 'fail_one',
+    description: 'first failure',
+    async check(ctx: { event: CognitiveEvent }) {
+      if (ctx.event.type === 'boom') {
+        return { valid: false, message: 'one', severity: 'error' };
+      }
+      return { valid: true };
+    },
+  });
+  kernel.registerInvariant({
+    name: 'fail_two',
+    description: 'second failure',
+    async check(ctx: { event: CognitiveEvent }) {
+      if (ctx.event.type === 'boom') {
+        return { valid: false, message: 'two', severity: 'error' };
+      }
+      return { valid: true };
+    },
+  });
+
+  const trigger = await kernel.log('boom', 'agent', {});
+  const history = kernel.getHistory();
+  const failures = history.filter((event) => event.type === 'invariant.failed');
+
+  assert.equal(history[0].id, trigger.id);
+  assert.equal(failures.length, 2);
+  assert.deepEqual(
+    failures.map((event) => event.payload.invariant).sort(),
+    ['fail_one', 'fail_two'],
+  );
+  assert.equal(failures.every((event) => event.causes[0] === trigger.id), true);
+  assert.equal(kernel.verify().valid, true);
+});
+
+test('registerInvariant: recording invariant.failed does not re-enter enforceInvariants', async () => {
+  const kernel = new ClankaKernel('run-no-reenter');
+  let checks = 0;
+  kernel.registerInvariant({
+    name: 'always_fail',
+    description: 'fails for every checked event',
+    async check() {
+      checks += 1;
+      assert.ok(checks <= 2, `enforceInvariants re-entered via invariant.failed (checks=${checks})`);
+      return { valid: false, message: 'nope', severity: 'error' };
+    },
+  });
+
+  const trigger = await kernel.log('boom', 'agent', {});
+  const history = kernel.getHistory();
+
+  assert.equal(checks, 1);
+  assert.equal(history.length, 2);
+  assert.equal(history[1].type, 'invariant.failed');
+  assert.deepEqual(history[1].causes, [trigger.id]);
   assert.equal(kernel.verify().valid, true);
 });
