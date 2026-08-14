@@ -1,15 +1,55 @@
 import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { EventSchema, Event, canonicalJSON } from './event.js';
+import { EventSchema, Event } from './event.js';
 
 interface FSState {
   [path: string]: { digest: string; size: number };
 }
 
+/**
+ * Deep canonical JSON for content-addressable event digests.
+ *
+ * Nested object keys are sorted recursively. Must stay aligned with
+ * `canonicalJSON` / `contentDigest` in event.ts and `toCanonical` in kernel.ts
+ * so createEvent-minted logs pass verifyRun.
+ */
+export function toCanonical(obj: unknown): string {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return `[${obj.map(item => toCanonical(item)).join(',')}]`;
+  }
+  const record = obj as Record<string, unknown>;
+  const sortedKeys = Object.keys(record).filter(key => record[key] !== undefined).sort();
+  const parts = sortedKeys.map(
+    key => `${JSON.stringify(key)}:${toCanonical(record[key])}`,
+  );
+  return `{${parts.join(',')}}`;
+}
+
+/**
+ * Workspace hash over reconstructed FS state after applying fs.diff events.
+ * Format: sha256 of `path:digest` entries joined by `;`, paths sorted.
+ */
+export function workspaceHashFromState(fsState: FSState): string {
+  const paths = Object.keys(fsState).sort();
+  const hashContent = paths.map(p => `${p}:${fsState[p].digest}`).join(';');
+  return createHash('sha256').update(hashContent).digest('hex');
+}
+
+/**
+ * Standalone EventLog JSONL verifier (schema, digest, seq, causes, fs replay,
+ * workspaceHash, optional strict `run.commit`).
+ *
+ * Not wired into the published `clanka-core` CLI. `clanka-core verify` uses
+ * `kernel.verify()` (digest / seq / causes only) under `src/runtime`. This
+ * module is library-only inside `packages/core/` (not a workspace package).
+ */
 export async function verifyRun(runPath: string, options: { strict?: boolean } = {}) {
   const content = fs.readFileSync(runPath, 'utf-8');
   const lines = content.trim().split('\n').filter(l => l.length > 0);
-  
+
   const history: Event[] = [];
   const eventIds = new Set<string>();
   const idToSeq = new Map<string, number>();
@@ -27,12 +67,12 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     const event = parseResult.data;
 
     // 2. Digest Verification
-    // Rule: id = sha256(canonical(event without id))
+    // Rule: id = sha256(deep-canonical(event without id)), including payload
     const { id: actualId, ...eventWithoutId } = event;
     const recomputedDigest = createHash('sha256')
-      .update(canonicalJSON(eventWithoutId))
+      .update(toCanonical(eventWithoutId))
       .digest('hex');
-      
+
     if (actualId !== recomputedDigest) {
       throw new Error(`Event ${event.seq} (id: ${actualId}) has invalid digest. Expected: ${recomputedDigest}`);
     }
@@ -59,7 +99,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     if (event.type === 'fs.diff') {
       const { txId, path: filePath, beforeDigest, afterDigest, size } = event.payload;
       if (!txId) throw new Error(`Event ${event.seq}: fs.diff missing txId`);
-      
+
       // Enforce no_file_collision within a txId
       if (!txTouchedPaths.has(txId)) txTouchedPaths.set(txId, new Set());
       const touched = txTouchedPaths.get(txId)!;
@@ -86,7 +126,7 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     if (event.type === 'fs.snapshot') {
       const { txId, files, workspaceHash } = event.payload;
       if (!txId) throw new Error(`Event ${event.seq}: fs.snapshot missing txId`);
-      
+
       // Verify files match state
       for (const file of files) {
         const state = fsState[file.path];
@@ -95,11 +135,8 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
         }
       }
 
-      // Recompute workspaceHash
-      const paths = Object.keys(fsState).sort();
-      const hashContent = paths.map(p => `${p}:${fsState[p].digest}`).join(';');
-      const recomputedWorkspaceHash = createHash('sha256').update(hashContent).digest('hex');
-      
+      const recomputedWorkspaceHash = workspaceHashFromState(fsState);
+
       if (workspaceHash !== recomputedWorkspaceHash) {
         throw new Error(`Event ${event.seq}: workspaceHash mismatch. Log: ${workspaceHash}, Computed: ${recomputedWorkspaceHash}`);
       }

@@ -54,19 +54,23 @@ export type Event = z.infer<typeof EventSchema>;
 /**
  * Canonical JSON serialization for consistent hashing.
  * Recursively sorts object keys (fixes the shallow array-replacer form that stripped nested keys).
+ *
+ * Do not use `JSON.stringify(obj, Object.keys(obj))` — that form only whitelists
+ * top-level keys and drops nested payload contents.
  */
-export function canonicalJSON(obj: any): string {
+export function canonicalJSON(obj: unknown): string {
   if (obj === null || typeof obj !== 'object') {
     return JSON.stringify(obj);
   }
   if (Array.isArray(obj)) {
-    return '[' + obj.map(item => canonicalJSON(item)).join(',') + ']';
+    return `[${obj.map(item => canonicalJSON(item)).join(',')}]`;
   }
-  const sortedKeys = Object.keys(obj).filter(key => obj[key] !== undefined).sort();
+  const record = obj as Record<string, unknown>;
+  const sortedKeys = Object.keys(record).filter(key => record[key] !== undefined).sort();
   const parts = sortedKeys.map(
-    key => JSON.stringify(key) + ':' + canonicalJSON(obj[key]),
+    key => `${JSON.stringify(key)}:${canonicalJSON(record[key])}`,
   );
-  return '{' + parts.join(',') + '}';
+  return `{${parts.join(',')}}`;
 }
 
 /**

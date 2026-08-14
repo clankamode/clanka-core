@@ -2,6 +2,7 @@ import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { ReplayHarness } from './replay';
 import type { Event } from './event';
+import type { Invariant } from './invariant';
 
 function makeEvent({
   id,
@@ -25,8 +26,6 @@ function makeEvent({
 test('replay with zero events returns empty result', async () => {
   const harness = new ReplayHarness({
     events: [],
-    tools: {},
-    models: {},
     invariants: [],
   });
 
@@ -53,8 +52,6 @@ test('replay with duplicate event IDs applies last-write-wins', async () => {
 
   const harness = new ReplayHarness({
     events: [first, second],
-    tools: {},
-    models: {},
     invariants: [],
   });
 
@@ -74,8 +71,6 @@ test('replay with out-of-order timestamps returns events sorted by timestamp', a
 
   const harness = new ReplayHarness({
     events,
-    tools: {},
-    models: {},
     invariants: [],
   });
 
@@ -96,8 +91,6 @@ describe('normalizeEvents determinism', () => {
 
     const harness = new ReplayHarness({
       events,
-      tools: {},
-      models: {},
       invariants: [],
     });
 
@@ -128,14 +121,10 @@ describe('concurrent run isolation', () => {
 
     const harnessA = new ReplayHarness({
       events: runAEvents,
-      tools: {},
-      models: {},
       invariants: [],
     });
     const harnessB = new ReplayHarness({
       events: runBEvents,
-      tools: {},
-      models: {},
       invariants: [],
     });
 
@@ -147,5 +136,90 @@ describe('concurrent run isolation', () => {
     resultA.events[0].payload = { run: 'A-mutated' };
     const rerunB = await harnessB.replay();
     assert.deepEqual(rerunB.events.map(event => event.payload), [{ run: 'B' }, { run: 'B' }]);
+  });
+});
+
+describe('replay honesty', () => {
+  test('config does not require tools or models', async () => {
+    const harness = new ReplayHarness({
+      events: [makeEvent({ id: 'e1', seq: 0, timestamp: 1 })],
+      invariants: [],
+    });
+    const result = await harness.replay();
+    assert.equal(result.events.length, 1);
+  });
+
+  test('optional tools/models are ignored (never invoked)', async () => {
+    let toolCalls = 0;
+    let modelCalls = 0;
+
+    const harness = new ReplayHarness({
+      events: [
+        makeEvent({ id: 'e1', seq: 0, timestamp: 1, type: 'tool.requested', payload: { tool: 'echo' } }),
+        makeEvent({ id: 'e2', seq: 1, timestamp: 2, type: 'model.requested', payload: { prompt: 'hi' } }),
+      ],
+      invariants: [],
+      tools: {
+        echo: {
+          name: 'echo',
+          simulate: async () => {
+            toolCalls += 1;
+            return { ok: true };
+          },
+        },
+      },
+      models: {
+        dummy: {
+          name: 'dummy',
+          simulate: async () => {
+            modelCalls += 1;
+            return 'nope';
+          },
+        },
+      },
+    });
+
+    await harness.replay();
+    assert.equal(toolCalls, 0);
+    assert.equal(modelCalls, 0);
+  });
+
+  test('runs invariants against the normalized sequence', async () => {
+    let sawTypes: string[] = [];
+    const invariant: Invariant = {
+      name: 'capture_types',
+      description: 'records types seen',
+      check: async (ctx) => {
+        sawTypes = ctx.events.map(e => e.type);
+        return { valid: true, severity: 'warn' };
+      },
+    };
+
+    const harness = new ReplayHarness({
+      events: [
+        makeEvent({ id: 'e2', seq: 1, timestamp: 200, type: 'run.finished' }),
+        makeEvent({ id: 'e1', seq: 0, timestamp: 100, type: 'run.started' }),
+      ],
+      invariants: [invariant],
+    });
+
+    const result = await harness.replay();
+    assert.equal(result.success, true);
+    assert.deepEqual(sawTypes, ['run.started', 'run.finished']);
+  });
+
+  test('diff detects payload mutation even when ids match', () => {
+    const left = makeEvent({ id: 'same', seq: 0, timestamp: 1, payload: { v: 1 } });
+    const right = makeEvent({ id: 'same', seq: 0, timestamp: 1, payload: { v: 2 } });
+
+    const result = ReplayHarness.diff([left], [right]);
+    assert.equal(result.identical, false);
+    assert.equal(result.divergeAt, 0);
+  });
+
+  test('diff reports identical only when full events match', () => {
+    const event = makeEvent({ id: 'e1', seq: 0, timestamp: 1, payload: { ok: true } });
+    const result = ReplayHarness.diff([event], [{ ...event }]);
+    assert.equal(result.identical, true);
   });
 });
