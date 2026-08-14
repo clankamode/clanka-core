@@ -50,14 +50,22 @@ export function loadConfig<TSchema extends ConfigSchema>(
   const cwd = options.cwd ?? process.cwd();
   const envFile = loadEnvFiles(resolveEnvFilePaths(cwd, options.envFilePath));
   const env = options.env ?? process.env;
+  // Preserve caller-provided config keys (including unknowns) so schema modes like
+  // .strict() / .passthrough() can see them instead of silently dropping them.
+  const configObject = { ...((options.config ?? {}) as Record<string, unknown>) };
   const candidate: Record<string, unknown> = {};
   const resolvedValues = new Map<string, ResolvedValue>();
 
+  for (const [key, value] of Object.entries(configObject)) {
+    if (value === undefined) {
+      continue;
+    }
+    candidate[key] = value;
+    resolvedValues.set(key, { value, source: 'config' });
+  }
+
   for (const [key, fieldSchema] of Object.entries(options.schema.shape)) {
-    const configValue = options.config?.[key as ConfigKey<TSchema>];
-    if (configValue !== undefined) {
-      candidate[key] = configValue;
-      resolvedValues.set(key, { value: configValue, source: 'config' });
+    if (candidate[key] !== undefined) {
       continue;
     }
 
@@ -142,7 +150,7 @@ function resolveEnvVarName<TSchema extends ConfigSchema>(
   envMap?: Partial<Record<ConfigKey<TSchema>, string>>,
 ): string {
   const mapped = envMap?.[key as ConfigKey<TSchema>];
-  if (mapped) {
+  if (mapped !== undefined) {
     return mapped;
   }
 
@@ -245,6 +253,16 @@ function buildValidationIssues<TSchema extends ConfigSchema>(
   envMap?: Partial<Record<ConfigKey<TSchema>, string>>,
 ): ConfigValidationIssue[] {
   return error.issues.map(issue => {
+    if (issue.code === 'unrecognized_keys') {
+      const keys = issue.keys;
+      return {
+        key: keys[0] ?? 'config',
+        path: keys.join(','),
+        source: 'config' as const,
+        message: `Unrecognized config key(s): ${keys.map(key => `"${key}"`).join(', ')}.`,
+      };
+    }
+
     const path = issue.path.map(segment => String(segment)).join('.');
     const key = typeof issue.path[0] === 'string' ? issue.path[0] : path || 'config';
     const resolved = resolvedValues.get(key);

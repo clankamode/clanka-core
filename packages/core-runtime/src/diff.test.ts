@@ -4,7 +4,9 @@ import {
   diffLines,
   diffRuns,
   formatDiffMarkdown,
+  formatLineDiff,
   summarizePayload,
+  truncateDiffLines,
 } from './diff.js';
 import type { CognitiveEvent } from './runtime/kernel.js';
 
@@ -43,4 +45,31 @@ test('formatDiffMarkdown mentions both run ids', () => {
 test('summarizePayload includes keys for plain objects', () => {
   const s = summarizePayload({ answer: 42 }, 200);
   assert.ok(s.includes('answer'));
+});
+
+test('truncateDiffLines appends marker when max is exceeded', () => {
+  const lines = ['-a', '+b', '-c', '+d'];
+  assert.deepEqual(truncateDiffLines(lines, 3, '[cut]'), ['-a', '+b', '[cut]']);
+});
+
+test('formatLineDiff applies maxLines truncation', () => {
+  const before = Array.from({ length: 6 }, (_, i) => `before-${i}`);
+  const after = Array.from({ length: 6 }, (_, i) => `after-${i}`);
+  const output = formatLineDiff(before, after, {
+    contextLines: 0,
+    maxLines: 3,
+    truncationMarker: '... (truncated)',
+  });
+  const lines = output.split('\n');
+  assert.equal(lines.length, 3);
+  assert.equal(lines[2], '... (truncated)');
+});
+
+test('diffLines does not honor maxLines; truncation is formatLineDiff-only', () => {
+  const lines = diffLines(['a'], ['a', 'b', 'c'], {
+    contextLines: 0,
+    // Runtime callers may pass excess fields; diffLines must ignore them.
+    maxLines: 1,
+  } as Parameters<typeof diffLines>[2]);
+  assert.deepEqual(lines, ['+b', '+c']);
 });
