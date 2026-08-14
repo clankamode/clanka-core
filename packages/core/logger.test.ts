@@ -129,6 +129,154 @@ test('structured output flag --json emits JSON lines', () => {
   }
 });
 
+test('structured output expands Error context instead of emitting empty objects', () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output, { structuredOutput: true });
+
+  try {
+    const logger = new EventLogger('run-error-ctx', config);
+    const err = new Error('disk full');
+    err.name = 'StorageError';
+    logger.error('write failed', { err });
+
+    const entry = JSON.parse(output.toString().trim());
+    assert.equal(entry.level, 'error');
+    assert.equal(entry.message, 'write failed');
+    assert.equal(entry.context.err.name, 'StorageError');
+    assert.equal(entry.context.err.message, 'disk full');
+    assert.equal(typeof entry.context.err.stack, 'string');
+    assert.match(entry.context.err.stack, /disk full/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('append writes to JSONL sink, not the console output stream', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-sink', config);
+    await logger.append(
+      makeEvent({
+        id: 'evt-sink',
+        seq: 0,
+        timestamp: 100,
+        type: 'run.started',
+        payload: { ok: true },
+      }),
+    );
+
+    assert.equal(output.toString(), '');
+    const restored = await logger.readLog();
+    assert.equal(restored.length, 1);
+    assert.equal(restored[0].id, 'evt-sink');
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex returns empty metadata when the JSONL file is missing', () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-index-empty', config);
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index-empty',
+      eventCount: 0,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+test('getIndex reports first/last timestamps after append', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logger = new EventLogger('run-index', config);
+    await logger.append(
+      makeEvent({ id: 'e0', seq: 0, timestamp: 100, type: 'run.started' }),
+    );
+    await logger.append(
+      makeEvent({ id: 'e1', seq: 1, timestamp: 250, type: 'run.finished' }),
+    );
+
+    assert.deepEqual(logger.getIndex(), {
+      runId: 'run-index',
+      eventCount: 2,
+      started: 100,
+      finished: 250,
+    });
+  } finally {
+    cleanup();
+  }
+});
+
+describe('blob offload', () => {
+  test('large payloads round-trip through blob storage', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-blob', config);
+      const payload = { blob: 'x'.repeat(200) };
+      await logger.append(
+        makeEvent({
+          id: 'evt-blob',
+          seq: 0,
+          timestamp: 100,
+          type: 'run.started',
+          payload,
+        }),
+      );
+
+      const logPath = path.join(config.runsDir, 'run-blob.jsonl');
+      const raw = JSON.parse(fs.readFileSync(logPath, 'utf-8').trim());
+      assert.deepEqual(raw.payload, { _blobRef: 'evt-blob' });
+
+      const blobPath = path.join(config.blobsDir, 'run-blob', 'evt-blob.json');
+      assert.equal(fs.existsSync(blobPath), true);
+
+      const restored = await logger.readLog();
+      assert.equal(restored.length, 1);
+      assert.deepEqual(restored[0].payload, payload);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('readLog throws when a blob reference is missing', async () => {
+    const output = new CaptureStream();
+    const { config, cleanup } = makeLoggerConfig(output, { maxPayloadSize: 32 });
+
+    try {
+      const logger = new EventLogger('run-missing-blob', config);
+      await logger.append(
+        makeEvent({
+          id: 'evt-missing',
+          seq: 0,
+          timestamp: 100,
+          type: 'run.started',
+          payload: { blob: 'y'.repeat(200) },
+        }),
+      );
+
+      const blobPath = path.join(config.blobsDir, 'run-missing-blob', 'evt-missing.json');
+      fs.rmSync(blobPath);
+
+      await assert.rejects(
+        () => logger.readLog(),
+        /Missing blob for event evt-missing: evt-missing/,
+      );
+    } finally {
+      cleanup();
+    }
+  });
+});
+
 describe('append/read ordering', () => {
   test('events are persisted in insertion order', async () => {
     const output = new CaptureStream();
