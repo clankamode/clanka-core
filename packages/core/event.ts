@@ -53,33 +53,16 @@ export type Event = z.infer<typeof EventSchema>;
 
 /**
  * Canonical JSON serialization for consistent hashing.
-<<<<<<< HEAD
  * Recursively sorts object keys (fixes the shallow array-replacer form that stripped nested keys).
- */
-export function canonicalJSON(obj: any): string {
-=======
- * - Nested object keys sorted recursively
- * - No whitespace
  *
- * Important: do not use `JSON.stringify(obj, Object.keys(obj))` — that form
- * only whitelists top-level keys and drops nested payload contents, so distinct
- * events can collapse onto the same digest.
+ * Do not use `JSON.stringify(obj, Object.keys(obj))` — that form only whitelists
+ * top-level keys and drops nested payload contents.
  */
 export function canonicalJSON(obj: unknown): string {
->>>>>>> 195733c (fix(core): align createEvent digests with deep verifyRun hashing)
   if (obj === null || typeof obj !== 'object') {
     return JSON.stringify(obj);
   }
   if (Array.isArray(obj)) {
-<<<<<<< HEAD
-    return '[' + obj.map(item => canonicalJSON(item)).join(',') + ']';
-  }
-  const sortedKeys = Object.keys(obj).filter(key => obj[key] !== undefined).sort();
-  const parts = sortedKeys.map(
-    key => JSON.stringify(key) + ':' + canonicalJSON(obj[key]),
-  );
-  return '{' + parts.join(',') + '}';
-=======
     return `[${obj.map(item => canonicalJSON(item)).join(',')}]`;
   }
   const record = obj as Record<string, unknown>;
@@ -88,7 +71,6 @@ export function canonicalJSON(obj: unknown): string {
     key => `${JSON.stringify(key)}:${canonicalJSON(record[key])}`,
   );
   return `{${parts.join(',')}}`;
->>>>>>> 195733c (fix(core): align createEvent digests with deep verifyRun hashing)
 }
 
 /**
