@@ -72,19 +72,23 @@ export class ClankaKernel {
     const event = { ...eventData, id } as CognitiveEvent;
 
     this.state.history.push(event);
-    await this.enforceInvariants();
+    await this.enforceInvariants(event);
     return event;
   }
 
-  private async enforceInvariants() {
+  private async enforceInvariants(triggeringEvent: CognitiveEvent) {
     for (const invariant of this.state.invariants) {
-      const result = await invariant.check({ events: this.state.history, runId: this.sessionId });
+      const result = await invariant.check({
+        events: this.state.history,
+        runId: this.sessionId,
+        event: triggeringEvent,
+      });
       if (!result.valid) {
         await this.log('invariant.failed', 'kernel', {
           invariant: invariant.name,
           message: result.message || 'No message',
           severity: result.severity,
-        }, [this.state.history[this.state.history.length - 1].id]);
+        }, [triggeringEvent.id]);
       }
     }
   }
@@ -112,6 +116,12 @@ export class ClankaKernel {
 
       if (actualId !== recomputedDigest) {
         throw new Error(`Event ${event.seq} has invalid digest. Expected: ${recomputedDigest}`);
+      }
+
+      if (event.runId !== this.sessionId) {
+        throw new Error(
+          `Event ${event.seq} has runId ${event.runId}, expected ${this.sessionId}`,
+        );
       }
 
       if (event.seq !== expectedSeq) {
