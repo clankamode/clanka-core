@@ -7,8 +7,30 @@ import { diffRuns, formatDiffMarkdown } from './diff.js';
 
 const RUNS_DIR = path.resolve(process.cwd(), 'runs');
 
+/** Published npm package that owns the `clanka-core` bin (`package.json` name). */
+export const PUBLISHED_PACKAGE_NAME = '@clankamode/core';
+
+/** Bin name declared in root `package.json` and documented in README. */
+export const PUBLISHED_BIN_NAME = 'clanka-core';
+
+/**
+ * Root CLI command surface shipped as `dist/cli.js` for `@clankamode/core`.
+ * Kept here (not only under packages/core-cli) because the published root
+ * package bin points at this compile target.
+ */
+export const CLI_COMMANDS = [
+  'run',
+  'log',
+  'replay',
+  'verify',
+  'ls',
+  'export',
+  'diff',
+] as const;
+
 export function usage(writeLine: (line: string) => void = console.log) {
-  writeLine('Usage: clanka-core <command> [args]');
+  writeLine(`Usage: ${PUBLISHED_BIN_NAME} <command> [args]`);
+  writeLine(`Package: ${PUBLISHED_PACKAGE_NAME}`);
   writeLine('Commands:');
   writeLine('  run <runId> [--force]');
   writeLine('  log <runId> <type> <payload-json>');
@@ -83,13 +105,14 @@ export function cmdReplay(
   runId: string,
   writeLine: (line: string) => void = console.log,
   writeError: (line: string) => void = console.error,
-) {
+): boolean {
   const kernel = loadRun(runId);
   const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
 
   if (events.length === 0) {
     writeError(`No events in run ${runId}`);
-    return;
+    process.exitCode = 1;
+    return false;
   }
 
   const firstTimestamp = events[0].timestamp;
@@ -99,6 +122,7 @@ export function cmdReplay(
     const payloadPreview = JSON.stringify(event.payload).slice(0, 80);
     writeLine(`+${deltaMs}ms  [${event.seq}]  ${event.type}  ${payloadPreview}`);
   }
+  return true;
 }
 
 function cmdVerify(runId: string) {
@@ -116,13 +140,14 @@ function cmdVerify(runId: string) {
 export function cmdLs(
   writeLine: (line: string) => void = console.log,
   writeError: (line: string) => void = console.error,
-) {
+): boolean {
   ensureRunsDir();
   const files = fs.readdirSync(RUNS_DIR).filter(name => name.endsWith('.jsonl')).sort();
 
   if (files.length === 0) {
     writeError('No runs found in runs/');
-    return;
+    process.exitCode = 1;
+    return false;
   }
 
   for (const file of files) {
@@ -147,6 +172,7 @@ export function cmdLs(
       writeLine(`${runId}\t0\t0\tFAIL (${message})`);
     }
   }
+  return true;
 }
 
 function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
@@ -160,8 +186,14 @@ function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
   }
 }
 
-function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
-  const events = kernel.getHistory().sort((a, b) => a.seq - b.seq);
+function eventsBySeq(kernel: ClankaKernel) {
+  return kernel.getHistory().sort((a, b) => a.seq - b.seq);
+}
+
+function formatExportMarkdown(
+  runId: string,
+  events: ReturnType<ClankaKernel['getHistory']>,
+): string {
   const lines = [`# Run Export: ${runId}`, '', `Total events: ${events.length}`, ''];
 
   for (const event of events) {
@@ -173,15 +205,22 @@ function formatExportMarkdown(runId: string, kernel: ClankaKernel): string {
   return lines.join('\n') + '\n';
 }
 
-export function cmdExport(runId: string, format: 'json' | 'markdown' = 'json') {
+export function cmdExport(
+  runId: string,
+  format: 'json' | 'markdown' = 'json',
+  write: (chunk: string) => void = chunk => {
+    process.stdout.write(chunk);
+  },
+) {
   const kernel = loadRun(runId);
+  const events = eventsBySeq(kernel);
 
   if (format === 'markdown') {
-    process.stdout.write(formatExportMarkdown(runId, kernel));
+    write(formatExportMarkdown(runId, events));
     return;
   }
 
-  process.stdout.write(JSON.stringify(kernel.getHistory(), null, 2) + '\n');
+  write(JSON.stringify(events, null, 2) + '\n');
 }
 
 async function main() {
