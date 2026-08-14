@@ -2,12 +2,16 @@ import { Event } from './event.js';
 import { Invariant, InvariantResult } from './invariant.js';
 
 /**
- * ReplayHarness: Deterministic replay given event log + tool/model mocks.
- * 
- * This is the nucleus. Given a log, we can:
- * - Replay with different models (changing only the model payload)
- * - Verify invariants post-hoc
- * - Diff two runs byte-for-byte
+ * ReplayHarness: deterministic inspection of an event log.
+ *
+ * Given a log, this harness:
+ * - Deduplicates by event id (last-write-wins) and sorts for stable order
+ * - Runs registered invariants against the normalized sequence
+ * - Diffs two logs by full event equality (id, type, seq, payload, …)
+ *
+ * Tool/model mocks may be supplied for API compatibility with callers that
+ * prepare them, but `replay()` does not invoke them. It does not re-execute
+ * tools or models; it normalizes and verifies the recorded sequence.
  */
 
 export interface MockTool {
@@ -42,6 +46,15 @@ export class ReplayHarness {
     this.runId = this.events[0]?.runId || 'unknown';
   }
 
+  /** Exposed for tests/diagnostics: mocks are retained but not called by replay(). */
+  public get registeredTools(): Readonly<Record<string, MockTool>> {
+    return this.tools;
+  }
+
+  public get registeredModels(): Readonly<Record<string, MockModel>> {
+    return this.models;
+  }
+
   private normalizeEvents(events: Event[]): Event[] {
     // Keep the last copy for duplicate IDs so replay is deterministic.
     const lastById = new Map<string, Event>();
@@ -64,9 +77,8 @@ export class ReplayHarness {
   }
 
   /**
-   * Replay: Execute the log deterministically.
-   * When tool.requested is encountered, mock the response from tool.responded.
-   * When model.requested is encountered, mock the response from model.responded.
+   * Normalize the log and evaluate invariants.
+   * Does not call tool/model mocks.
    */
   public async replay(): Promise<{
     success: boolean;
@@ -76,7 +88,6 @@ export class ReplayHarness {
     const replayedEvents = this.normalizeEvents(this.events);
     const invariantResults: { invariant: string; result: InvariantResult }[] = [];
 
-    // Second pass: check all invariants
     for (const invariant of this.invariants) {
       const result = await invariant.check({ events: replayedEvents, runId: this.runId });
       invariantResults.push({ invariant: invariant.name, result });
@@ -92,8 +103,8 @@ export class ReplayHarness {
   }
 
   /**
-   * Diff: Compare two event logs.
-   * Highlights: event order differences, payload mutations, missing/extra events.
+   * Diff: Compare two event logs for full equality of each event.
+   * Diverges on the first index where events differ (any field), or on length mismatch.
    */
   public static diff(log1: Event[], log2: Event[]): {
     identical: boolean;
@@ -103,7 +114,7 @@ export class ReplayHarness {
     const minLen = Math.min(log1.length, log2.length);
     
     for (let i = 0; i < minLen; i++) {
-      if (log1[i].id !== log2[i].id) {
+      if (!eventsEqual(log1[i], log2[i])) {
         return {
           identical: false,
           divergeAt: i,
@@ -125,4 +136,18 @@ export class ReplayHarness {
       summary: 'Logs are identical',
     };
   }
+}
+
+function eventsEqual(a: Event, b: Event): boolean {
+  return (
+    a.id === b.id
+    && a.v === b.v
+    && a.runId === b.runId
+    && a.seq === b.seq
+    && a.type === b.type
+    && a.timestamp === b.timestamp
+    && JSON.stringify(a.causes ?? []) === JSON.stringify(b.causes ?? [])
+    && JSON.stringify(a.payload) === JSON.stringify(b.payload)
+    && JSON.stringify(a.meta ?? null) === JSON.stringify(b.meta ?? null)
+  );
 }

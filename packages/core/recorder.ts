@@ -3,10 +3,15 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { ClankaKernel } from '../../src/runtime/kernel';
+import { workspaceHashFromState } from './verify.js';
+
+type FileState = { digest: string; size: number };
 
 export class ClankaRecorder {
   private workspaceRoot: string;
   private lastEventId?: string;
+  /** Cumulative reconstructed FS state from emitted fs.diff events (matches verify). */
+  private fsState: Record<string, FileState> = {};
 
   constructor(
     private kernel: ClankaKernel,
@@ -78,41 +83,68 @@ export class ClankaRecorder {
     });
   }
 
-  private async emitDiffsAndSnapshots(txId: string, pre: Map<string, any>, post: Map<string, any>, causes: string[]) {
+  private async emitDiffsAndSnapshots(
+    txId: string,
+    pre: Map<string, FileState>,
+    post: Map<string, FileState>,
+    causes: string[],
+  ) {
     const touched: string[] = [];
-    const snapshotFiles: any[] = [];
     let currentCauses = causes;
 
+    // Creates and updates
     for (const [relPath, postData] of post.entries()) {
       const preData = pre.get(relPath);
       if (!preData || preData.digest !== postData.digest) {
         touched.push(relPath);
+        // beforeDigest must match verify's reconstructed state, not merely disk pre-scan
+        const beforeDigest = this.fsState[relPath]?.digest ?? 'null';
         const diff = await this.kernel.log('fs.diff', 'kernel', {
           txId,
           path: relPath,
-          beforeDigest: preData?.digest || 'null',
+          beforeDigest,
           afterDigest: postData.digest,
-          patch: { kind: 'unified', text: 'artifact_mutation' }
+          size: postData.size,
+          patch: { kind: 'blob', digest: postData.digest },
         }, currentCauses);
+        this.fsState[relPath] = { digest: postData.digest, size: postData.size };
         currentCauses = [diff.id];
       }
-      snapshotFiles.push({ path: relPath, digest: postData.digest, size: postData.size });
     }
 
-    const workspaceHash = createHash('sha256')
-      .update(JSON.stringify(snapshotFiles.sort((a, b) => a.path.localeCompare(b.path))))
-      .digest('hex');
+    // Deletes: gone from post. Only emit when reconstructed state had the path,
+    // so beforeDigest matches verify (untracked disk-only files are not in the log).
+    for (const [relPath] of pre.entries()) {
+      if (post.has(relPath)) continue;
+      const beforeDigest = this.fsState[relPath]?.digest ?? 'null';
+      if (beforeDigest === 'null') continue;
+      touched.push(relPath);
+      const diff = await this.kernel.log('fs.diff', 'kernel', {
+        txId,
+        path: relPath,
+        beforeDigest,
+        afterDigest: 'null',
+        patch: { kind: 'blob', digest: 'null' },
+      }, currentCauses);
+      delete this.fsState[relPath];
+      currentCauses = [diff.id];
+    }
+
+    const snapshotFiles = touched
+      .filter(p => this.fsState[p] !== undefined)
+      .map(p => ({ path: p, digest: this.fsState[p].digest, size: this.fsState[p].size }))
+      .sort((a, b) => a.path.localeCompare(b.path));
 
     const snap = await this.kernel.log('fs.snapshot', 'kernel', {
-      workspaceHash,
+      workspaceHash: workspaceHashFromState(this.fsState),
       txId,
-      files: snapshotFiles.filter(f => touched.includes(f.path))
+      files: snapshotFiles,
     }, currentCauses);
     this.lastEventId = snap.id;
   }
 
-  private scanWorkspace(root: string): Map<string, { digest: string, size: number }> {
-    const state = new Map();
+  private scanWorkspace(root: string): Map<string, FileState> {
+    const state = new Map<string, FileState>();
     const scan = (dir: string) => {
       if (!fs.existsSync(dir)) return;
       const list = fs.readdirSync(dir);
