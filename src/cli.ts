@@ -40,6 +40,9 @@ export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('  export <runId> [--format json|markdown]');
   writeLine('  diff <runId1> <runId2> [--json]');
   writeLine('  help | --help | -h');
+  writeLine('Notes:');
+  writeLine('  verify/ls PASS|FAIL = digest, seq, causes, v, runId, timestamps');
+  writeLine('  (not invariants, EventLog schema, fs snapshot, or workspaceHash)');
 }
 
 export function isHelpCommand(command: string | undefined): boolean {
