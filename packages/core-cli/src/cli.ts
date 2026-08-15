@@ -18,7 +18,7 @@ export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('  diff <runId1> <runId2> [--json]');
   writeLine('  help | --help | -h');
   writeLine('Notes:');
-  writeLine('  verify/ls PASS|FAIL = digest, seq, causes only');
+  writeLine('  verify/ls PASS|FAIL = digest, seq, causes, v, runId, timestamps');
   writeLine('  (not EventLog schema, fs snapshot, or workspaceHash checks)');
 }
 

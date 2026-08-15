@@ -22,7 +22,7 @@ clanka-core help | --help | -h
 - `export` (default `--format json`) prints a pretty-printed JSON **array** of events, not the raw JSONL file contents. Both `json` and `markdown` emit events ordered by `seq`.
 - `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error.
 - Unknown options and unexpected extra arguments are rejected (not silently ignored).
-- `verify` / `ls` `PASS`|`FAIL` means ClankaKernel integrity only: event digests, contiguous `seq`, and causes. It does **not** run EventLog schema validation, fs snapshot checks, or `workspaceHash` verification (those live in `packages/core`, not this CLI).
+- `verify` / `ls` `PASS`|`FAIL` means ClankaKernel integrity only: event digests, contiguous `seq`, causes, schema version `v`, `runId`, and timestamps (finite, non-decreasing). It does **not** run EventLog schema validation, fs snapshot checks, or `workspaceHash` verification (those live in `packages/core`, not this CLI).
 - `ls` with no runs, and `replay` with an empty history, print errors on stderr.
 - `ls` lists local runs with that verify status (`PASS` / `FAIL` plus reason).
 - Default `run` emits `run.start` then `run.commit` (not EventLog’s `run.started`).
