@@ -307,7 +307,7 @@ test('cmdExport json and markdown both order events by seq', async () => {
   }
 });
 
-test('usage states verify scope is digest/seq/causes only', async () => {
+test('usage states verify scope is digest/seq/causes/v/runId/timestamps', async () => {
   const prior = process.env.CLANKA_CORE_CLI_TEST;
   process.env.CLANKA_CORE_CLI_TEST = '1';
 
@@ -317,7 +317,7 @@ test('usage states verify scope is digest/seq/causes only', async () => {
     const lines: string[] = [];
     usage(line => lines.push(line));
     const text = lines.join('\n');
-    assert.match(text, /digest, seq, causes only/);
+    assert.match(text, /digest, seq, causes, v, runId, timestamps/);
     assert.match(text, /not EventLog schema, fs snapshot, or workspaceHash/);
   } finally {
     if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
