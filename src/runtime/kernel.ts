@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+/** Schema version written by `log()` and required by `verify()`. */
+export const EVENT_SCHEMA_VERSION = 1.1;
+
 export interface CognitiveEvent {
   v: number;
   id: string;
@@ -30,8 +33,6 @@ export interface VerifyResult {
   eventCount: number;
 }
 
-const EVENT_SCHEMA_VERSION = 1.1;
-
 export function toCanonical(obj: any): string {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
   if (Array.isArray(obj)) return '[' + obj.map(item => toCanonical(item)).join(',') + ']';
@@ -58,7 +59,7 @@ export class ClankaKernel {
     payload: any,
     causes: string[] = [],
   ): CognitiveEvent {
-    const eventData: any = {
+    const eventData: Omit<CognitiveEvent, 'id'> = {
       v: EVENT_SCHEMA_VERSION,
       runId: this.sessionId,
       seq: this.state.history.length,
@@ -66,10 +67,9 @@ export class ClankaKernel {
       timestamp: Date.now(),
       causes,
       payload,
-      meta: { agentId }
+      meta: { agentId },
     };
 
-    // Digest-based ID
     const id = createHash('sha256').update(toCanonical(eventData)).digest('hex');
     const event = { ...eventData, id } as CognitiveEvent;
     this.state.history.push(event);
@@ -77,10 +77,10 @@ export class ClankaKernel {
   }
 
   public async log(
-    type: string, 
-    agentId: string, 
-    payload: any, 
-    causes: string[] = []
+    type: string,
+    agentId: string,
+    payload: any,
+    causes: string[] = [],
   ): Promise<CognitiveEvent> {
     const event = this.appendEvent(type, agentId, payload, causes);
     await this.enforceInvariants(event);
@@ -88,7 +88,9 @@ export class ClankaKernel {
   }
 
   private async enforceInvariants(triggeringEvent: CognitiveEvent) {
-    for (const invariant of this.state.invariants) {
+    // Copy the list so registration during checks cannot change iteration.
+    const invariants = [...this.state.invariants];
+    for (const invariant of invariants) {
       const result = await invariant.check({
         events: this.state.history,
         runId: this.sessionId,
@@ -96,6 +98,7 @@ export class ClankaKernel {
       });
       if (!result.valid) {
         // Append directly — do not re-enter enforceInvariants via log().
+        // Pin cause to the triggering event (not history tip after awaits).
         this.appendEvent('invariant.failed', 'kernel', {
           invariant: invariant.name,
           message: result.message || 'No message',
