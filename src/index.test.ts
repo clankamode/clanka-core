@@ -299,6 +299,29 @@ test('usage lists help aliases', async () => {
   }
 });
 
+test('usage states verify scope is digest/seq/causes/v/runId/timestamps', async () => {
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+  vi.resetModules();
+  const { usage } = await import('./cli');
+  const lines: string[] = [];
+  usage(line => lines.push(line));
+  const text = lines.join('\n');
+  assert.match(text, /digest, seq, causes, v, runId, timestamps/);
+  assert.match(text, /not invariants/);
+  assert.doesNotMatch(text, /integrity\/invariants/);
+
+  const readme = fs.readFileSync(path.resolve(__dirname, '../README.md'), 'utf8');
+  assert.match(readme, /verify <runId>.*digest, seq, causes, v, runId, and timestamps/);
+  assert.doesNotMatch(readme, /integrity\/invariants/);
+
+  if (priorEnv === undefined) {
+    delete process.env.CLANKA_CORE_CLI_TEST;
+  } else {
+    process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+  }
+});
+
 test('cmdReplay empty run prints explicit message', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-replay-empty-'));
   const priorCwd = process.cwd();
