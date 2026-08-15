@@ -36,10 +36,11 @@ test('isHelpCommand recognizes help flags', async () => {
   }
 });
 
-test('cmdReplay empty run prints explicit message', async () => {
+test('cmdReplay empty run prints explicit message and exits non-zero', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-replay-empty-'));
   const priorCwd = process.cwd();
   const prior = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
 
   try {
     process.chdir(tempRoot);
@@ -47,6 +48,7 @@ test('cmdReplay empty run prints explicit message', async () => {
     fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
 
     process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
     vi.resetModules();
     const { cmdReplay } = await import('./cli.js');
 
@@ -56,7 +58,9 @@ test('cmdReplay empty run prints explicit message', async () => {
 
     assert.deepEqual(lines, []);
     assert.deepEqual(errors, ['No events in run empty']);
+    assert.equal(process.exitCode, 1);
   } finally {
+    process.exitCode = priorExit;
     process.chdir(priorCwd);
     if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
     else process.env.CLANKA_CORE_CLI_TEST = prior;
@@ -64,14 +68,16 @@ test('cmdReplay empty run prints explicit message', async () => {
   }
 });
 
-test('cmdLs empty runs dir prints explicit message', async () => {
+test('cmdLs empty runs dir prints explicit message and exits non-zero', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-ls-empty-'));
   const priorCwd = process.cwd();
   const prior = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
 
   try {
     process.chdir(tempRoot);
     process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
     vi.resetModules();
     const { cmdLs } = await import('./cli.js');
 
@@ -81,14 +87,15 @@ test('cmdLs empty runs dir prints explicit message', async () => {
 
     assert.deepEqual(lines, []);
     assert.deepEqual(errors, ['No runs found in runs/']);
+    assert.equal(process.exitCode, 1);
   } finally {
+    process.exitCode = priorExit;
     process.chdir(priorCwd);
     if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
     else process.env.CLANKA_CORE_CLI_TEST = prior;
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
-
 test('cmdLs surfaces verify failure reason', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-ls-fail-'));
   const priorCwd = process.cwd();

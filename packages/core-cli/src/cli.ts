@@ -91,6 +91,7 @@ export function cmdReplay(
 
   if (events.length === 0) {
     writeError(`No events in run ${runId}`);
+    process.exitCode = 1;
     return;
   }
 
@@ -124,6 +125,7 @@ export function cmdLs(
 
   if (files.length === 0) {
     writeError('No runs found in runs/');
+    process.exitCode = 1;
     return;
   }
 
