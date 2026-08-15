@@ -30,7 +30,8 @@ export type { MockModel, MockTool, ReplayConfig } from './replay.js';
 
 // packages/core is NOT a workspace/npm package. Do not export ClankaKernel here —
 // operators get that from src/runtime (@clankamode/core / @clankamode/core-runtime)
-// and `clanka-core verify` uses runtime kernel.verify() (digest/seq/causes).
+// and `clanka-core verify` uses runtime kernel.verify()
+// (v / runId / timestamps / digest / seq / causes).
 // EventLogKernel is the local EventLog-typed companion only.
 export { EventLogKernel, toCanonical } from './kernel.js';
 export type {

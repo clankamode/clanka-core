@@ -12,7 +12,7 @@ async function test() {
   const history1 = kernel.getHistory();
   const violations1 = history1.filter(e => e.type === 'invariant.failed');
   console.log('Violations:', violations1.length);
-  console.log('verify (digest/seq/causes):', kernel.verify());
+  console.log('verify (v/runId/timestamps/digest/seq/causes):', kernel.verify());
 
   console.log('\n--- Case 2: Invalid flow (Tool without Decision in causes) ---');
   await kernel.log('tool.requested', { command: 'rm -rf /' }, { agentId: 'rogue-agent', tool: 'exec' });
@@ -23,7 +23,7 @@ async function test() {
   if (violations2.length > 0) {
     console.log('Message:', violations2[0].payload.message);
   }
-  console.log('verify (digest/seq/causes):', kernel.verify());
+  console.log('verify (v/runId/timestamps/digest/seq/causes):', kernel.verify());
 }
 
 test().catch(console.error);
