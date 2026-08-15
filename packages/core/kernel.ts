@@ -11,7 +11,7 @@ export interface EventLogKernelConfig {
   v?: number;
 }
 
-/** Same shape as runtime kernel.verify(): digest + seq + causes only. */
+/** Same shape as runtime kernel.verify() result. */
 export interface EventLogVerifyResult {
   valid: boolean;
   eventCount: number;
@@ -40,7 +40,8 @@ function digestEvent(eventWithoutId: Omit<Event, 'id'>): string {
  * EventLog-typed in-memory kernel for packages/core modules.
  * Not the operator ClankaKernel — that lives in src/runtime (published via
  * @clankamode/core / @clankamode/core-runtime). Operator `clanka-core verify`
- * calls runtime kernel.verify() (digest/seq/causes), not EventLog verifyRun.
+ * calls runtime kernel.verify() (v / runId / timestamps / digest / seq / causes),
+ * not EventLog verifyRun.
  */
 export class EventLogKernel {
   private runId: string;
@@ -139,10 +140,14 @@ export class EventLogKernel {
     return this.history.map((event) => JSON.stringify(event)).join('\n');
   }
 
-  /** Digest / seq / causes — same contract as runtime ClankaKernel.verify(). */
+  /**
+   * Same contract as runtime ClankaKernel.verify():
+   * digest, schema version `v`, runId, finite/monotonic timestamps, seq, causes.
+   */
   public verify(): EventLogVerifyResult {
     const eventIds = new Set<string>();
     const idToSeq = new Map<string, number>();
+    let previousTimestamp: number | undefined;
 
     for (let expectedSeq = 0; expectedSeq < this.history.length; expectedSeq++) {
       const event = this.history[expectedSeq];
@@ -152,6 +157,28 @@ export class EventLogKernel {
       if (actualId !== recomputedDigest) {
         throw new Error(
           `Event ${event.seq} has invalid digest. Expected: ${recomputedDigest}`
+        );
+      }
+
+      if (event.v !== this.v) {
+        throw new Error(
+          `Event ${event.seq} has invalid version ${event.v}, expected ${this.v}`,
+        );
+      }
+
+      if (event.runId !== this.runId) {
+        throw new Error(
+          `Event ${event.seq} has runId ${event.runId}, expected ${this.runId}`,
+        );
+      }
+
+      if (typeof event.timestamp !== 'number' || !Number.isFinite(event.timestamp)) {
+        throw new Error(`Event ${event.seq} has invalid timestamp: ${event.timestamp}`);
+      }
+
+      if (previousTimestamp !== undefined && event.timestamp < previousTimestamp) {
+        throw new Error(
+          `Event ${event.seq} has decreasing timestamp ${event.timestamp} < ${previousTimestamp}`,
         );
       }
 
@@ -173,6 +200,7 @@ export class EventLogKernel {
 
       eventIds.add(event.id);
       idToSeq.set(event.id, event.seq);
+      previousTimestamp = event.timestamp;
     }
 
     return { valid: true, eventCount: this.history.length };

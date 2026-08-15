@@ -43,8 +43,9 @@ export function workspaceHashFromState(fsState: FSState): string {
  * workspaceHash, optional strict `run.commit`).
  *
  * Not wired into the published `clanka-core` CLI. `clanka-core verify` uses
- * `kernel.verify()` (digest / seq / causes only) under `src/runtime`. This
- * module is library-only inside `packages/core/` (not a workspace package).
+ * `kernel.verify()` under `src/runtime` (v / runId / timestamps / digest /
+ * seq / causes). This module is library-only inside `packages/core/` (not a
+ * workspace package).
  */
 export async function verifyRun(runPath: string, options: { strict?: boolean } = {}) {
   const content = fs.readFileSync(runPath, 'utf-8');

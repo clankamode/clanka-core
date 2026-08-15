@@ -18,7 +18,7 @@ describe('packages/core index surface (not a published package)', () => {
     assert.equal(typeof coreIndex.verifyRun, 'function');
   });
 
-  test('EventLogKernel.verify is digest/seq/causes only (clanka-core verify contract)', async () => {
+  test('EventLogKernel.verify accepts a valid causal log (runtime-aligned contract)', async () => {
     const kernel = new coreIndex.EventLogKernel('run-index-verify');
     const start = await kernel.log('run.started', { ok: true }, { agentId: 'agent' });
     await kernel.log('run.finished', { ok: true }, { agentId: 'agent' }, [start.id]);
@@ -69,7 +69,7 @@ describe('EventLogKernel digest integrity', () => {
   });
 });
 
-describe('EventLogKernel.verify (operator-aligned contract)', () => {
+describe('EventLogKernel.verify (runtime-aligned contract)', () => {
   test('passes for a valid causal log', async () => {
     const kernel = new EventLogKernel('run-verify-ok');
     const start = await kernel.log('run.started', { name: 'ok' }, { agentId: 'agent' });
@@ -90,6 +90,57 @@ describe('EventLogKernel.verify (operator-aligned contract)', () => {
     const kernel = new EventLogKernel('run-unknown-cause');
     await kernel.log('run.finished', {}, { agentId: 'agent' }, ['missing-cause']);
     assert.throws(() => kernel.verify(), /unknown cause/);
+  });
+
+  test('throws when event runId does not match kernel runId', async () => {
+    const kernel = new EventLogKernel('expected-run');
+    await kernel.log('run.started', { data: 1 }, { agentId: 'agent' });
+    const [event] = kernel.getHistory();
+    const mismatched = { ...event, runId: 'other-run' };
+    const { id: _omit, ...withoutId } = mismatched;
+    kernel.loadHistory([{ ...mismatched, id: recalcId(withoutId) }]);
+    assert.throws(() => kernel.verify(), /runId/);
+  });
+
+  test('throws when fromJSONL runId disagrees with event runId', async () => {
+    const producer = new EventLogKernel('run-B');
+    await producer.log('run.started', { leaked: true }, { agentId: 'agent' });
+    const loadedAsA = EventLogKernel.fromJSONL('run-A', producer.serialize());
+    assert.throws(() => loadedAsA.verify(), /runId/);
+  });
+
+  test('throws when event schema version does not match kernel v', async () => {
+    const kernel = new EventLogKernel('run-version');
+    await kernel.log('run.started', {}, { agentId: 'agent' });
+    const [event] = kernel.getHistory();
+    const wrongVersion = { ...event, v: 2 };
+    const { id: _omit, ...withoutId } = wrongVersion;
+    kernel.loadHistory([{ ...wrongVersion, id: recalcId(withoutId) }]);
+    assert.throws(() => kernel.verify(), /version|v\b/i);
+  });
+
+  test('throws when timestamp is not a finite number', async () => {
+    const kernel = new EventLogKernel('run-nan-ts');
+    await kernel.log('run.started', {}, { agentId: 'agent' });
+    const [event] = kernel.getHistory();
+    const nanTs = { ...event, timestamp: Number.NaN };
+    const { id: _omit, ...withoutId } = nanTs;
+    kernel.loadHistory([{ ...nanTs, id: recalcId(withoutId) }]);
+    assert.throws(() => kernel.verify(), /timestamp/i);
+  });
+
+  test('throws when timestamps decrease', async () => {
+    const kernel = new EventLogKernel('run-ts-order');
+    await kernel.log('run.started', {}, { agentId: 'agent' });
+    await kernel.log('run.finished', {}, { agentId: 'agent' });
+    const history = kernel.getHistory();
+    const earlier = { ...history[1], timestamp: history[0].timestamp - 1 };
+    const { id: _omit, ...withoutId } = earlier;
+    kernel.loadHistory([
+      history[0],
+      { ...earlier, id: recalcId(withoutId) },
+    ]);
+    assert.throws(() => kernel.verify(), /timestamp|decreasing/i);
   });
 });
 
