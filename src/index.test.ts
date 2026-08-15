@@ -548,6 +548,105 @@ test('cmdRun refuses to overwrite an existing run without --force', async () => 
   }
 });
 
+test('parseExportArgs rejects bare --format and unknown options', async () => {
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+
+  try {
+    vi.resetModules();
+    const { parseExportArgs } = await import('./cli');
+
+    assert.deepEqual(parseExportArgs(['demo']), { runId: 'demo', format: 'json' });
+    assert.deepEqual(parseExportArgs(['demo', '--format', 'markdown']), {
+      runId: 'demo',
+      format: 'markdown',
+    });
+    assert.deepEqual(parseExportArgs(['--format=markdown', 'demo']), {
+      runId: 'demo',
+      format: 'markdown',
+    });
+
+    assert.throws(
+      () => parseExportArgs(['demo', '--format']),
+      /export --format requires a value \(json or markdown\)/,
+    );
+    assert.throws(
+      () => parseExportArgs(['demo', '--pretty']),
+      /export: unknown option --pretty/,
+    );
+    assert.throws(
+      () => parseExportArgs(['demo', 'json']),
+      /export accepts only <runId> and optional --format/,
+    );
+    assert.throws(
+      () => parseExportArgs(['demo', '--format', 'yaml']),
+      /export --format must be one of: json, markdown/,
+    );
+  } finally {
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+  }
+});
+
+test('parseDiffArgs and parseRunArgs reject unknown options', async () => {
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+
+  try {
+    vi.resetModules();
+    const { parseDiffArgs, parseRunArgs } = await import('./cli');
+
+    assert.deepEqual(parseDiffArgs(['a', 'b', '--json']), {
+      runId1: 'a',
+      runId2: 'b',
+      jsonOutput: true,
+    });
+    assert.throws(() => parseDiffArgs(['a', 'b', '--yaml']), /diff: unknown option --yaml/);
+    assert.throws(() => parseDiffArgs(['a', 'b', '--json=true']), /diff: unknown option --json=true/);
+
+    assert.deepEqual(parseRunArgs(['demo', '--force']), { runId: 'demo', force: true });
+    assert.throws(() => parseRunArgs(['demo', '--nope']), /run: unknown option --nope/);
+  } finally {
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+  }
+});
+
+test('published runCli rejects unknown options that used to be silently ignored', async () => {
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  process.env.CLANKA_CORE_CLI_TEST = '1';
+
+  try {
+    vi.resetModules();
+    const { runCli } = await import('./cli');
+
+    await assert.rejects(() => runCli(['verify', 'demo', '--strict']), /verify: unknown option --strict/);
+    await assert.rejects(() => runCli(['replay', 'demo', '--verbose']), /replay: unknown option --verbose/);
+    await assert.rejects(() => runCli(['ls', 'demo']), /ls accepts no arguments/);
+    await assert.rejects(() => runCli(['ls', '--all']), /ls: unknown option --all/);
+    await assert.rejects(
+      () => runCli(['log', 'demo', 'note', '{}', 'EXTRA']),
+      /log accepts only <runId> <type> <payload-json>/,
+    );
+    await assert.rejects(
+      () => runCli(['export', 'demo', '--format']),
+      /export --format requires a value \(json or markdown\)/,
+    );
+  } finally {
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+  }
+});
+
 test('root package publish surface matches README CLI claims', async () => {
   const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
   process.env.CLANKA_CORE_CLI_TEST = '1';
