@@ -223,88 +223,210 @@ export function cmdExport(
   write(JSON.stringify(events, null, 2) + '\n');
 }
 
-async function main() {
-  const [, , command, ...args] = process.argv;
+function isOption(arg: string): boolean {
+  return arg.startsWith('-');
+}
+
+function unknownOptionError(command: string, option: string): Error {
+  return new Error(`${command}: unknown option ${option}`);
+}
+
+function parseExactPositionals(
+  command: string,
+  args: string[],
+  count: number,
+  usageHint: string,
+): string[] {
+  const positionals: string[] = [];
+  for (const arg of args) {
+    if (isOption(arg)) {
+      throw unknownOptionError(command, arg);
+    }
+    positionals.push(arg);
+  }
+  if (positionals.length < count) {
+    throw new Error(`${command} requires ${usageHint}`);
+  }
+  if (positionals.length > count) {
+    throw new Error(`${command} accepts only ${usageHint}`);
+  }
+  return positionals;
+}
+
+export function parseExportArgs(args: string[]): {
+  runId: string;
+  format: 'json' | 'markdown';
+} {
+  const positionals: string[] = [];
+  let format: 'json' | 'markdown' = 'json';
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    if (arg === '--format' || arg.startsWith('--format=')) {
+      let value: string | undefined;
+      if (arg.startsWith('--format=')) {
+        value = arg.slice('--format='.length);
+      } else {
+        const next = args[i + 1];
+        if (next === undefined || isOption(next)) {
+          throw new Error('export --format requires a value (json or markdown)');
+        }
+        value = next;
+        i += 1;
+      }
+
+      if (value !== 'json' && value !== 'markdown') {
+        throw new Error('export --format must be one of: json, markdown');
+      }
+      format = value;
+      continue;
+    }
+
+    if (isOption(arg)) {
+      throw unknownOptionError('export', arg);
+    }
+
+    positionals.push(arg);
+  }
+
+  if (positionals.length === 0) {
+    throw new Error('export requires <runId>');
+  }
+  if (positionals.length > 1) {
+    throw new Error('export accepts only <runId> and optional --format');
+  }
+
+  return { runId: positionals[0], format };
+}
+
+export function parseDiffArgs(args: string[]): {
+  runId1: string;
+  runId2: string;
+  jsonOutput: boolean;
+} {
+  const positionals: string[] = [];
+  let jsonOutput = false;
+
+  for (const arg of args) {
+    if (arg === '--json') {
+      jsonOutput = true;
+      continue;
+    }
+    if (isOption(arg)) {
+      throw unknownOptionError('diff', arg);
+    }
+    positionals.push(arg);
+  }
+
+  if (positionals.length < 2) {
+    throw new Error('diff requires <runId1> <runId2>');
+  }
+  if (positionals.length > 2) {
+    throw new Error('diff accepts only <runId1> <runId2> and optional --json');
+  }
+
+  return { runId1: positionals[0], runId2: positionals[1], jsonOutput };
+}
+
+export function parseRunArgs(args: string[]): { runId: string; force: boolean } {
+  const positionals: string[] = [];
+  let force = false;
+
+  for (const arg of args) {
+    if (arg === '--force') {
+      force = true;
+      continue;
+    }
+    if (isOption(arg)) {
+      throw unknownOptionError('run', arg);
+    }
+    positionals.push(arg);
+  }
+
+  if (positionals.length === 0) {
+    throw new Error('run requires <runId>');
+  }
+  if (positionals.length > 1) {
+    throw new Error('run accepts only <runId> and optional --force');
+  }
+
+  return { runId: positionals[0], force };
+}
+
+/** Dispatch argv (command + args). Used by the published bin entry and tests. */
+export async function runCli(argv: string[]): Promise<void> {
+  const [command, ...args] = argv;
 
   if (!command) {
     usage();
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
 
   if (isHelpCommand(command)) {
     usage();
-    process.exit(0);
+    return;
   }
 
   if (command === 'run') {
-    const force = args.includes('--force');
-    const positional = args.filter(arg => arg !== '--force');
-    const runId = positional[0];
-    if (!runId) throw new Error('run requires <runId>');
-    if (positional.length > 1) {
-      throw new Error('run accepts only <runId> and optional --force');
-    }
+    const { runId, force } = parseRunArgs(args);
     await cmdRun(runId, { force });
     return;
   }
 
   if (command === 'log') {
-    const [runId, type, payloadJson] = args;
-    if (!runId || !type || payloadJson === undefined) {
-      throw new Error('log requires <runId> <type> <payload-json>');
-    }
+    const [runId, type, payloadJson] = parseExactPositionals(
+      'log',
+      args,
+      3,
+      '<runId> <type> <payload-json>',
+    );
     await cmdLog(runId, type, payloadJson);
     return;
   }
 
   if (command === 'verify') {
-    const runId = args[0];
-    if (!runId) throw new Error('verify requires <runId>');
+    const [runId] = parseExactPositionals('verify', args, 1, '<runId>');
     cmdVerify(runId);
     return;
   }
 
   if (command === 'replay') {
-    const runId = args[0];
-    if (!runId) throw new Error('replay requires <runId>');
+    const [runId] = parseExactPositionals('replay', args, 1, '<runId>');
     cmdReplay(runId);
     return;
   }
 
   if (command === 'ls') {
+    if (args.length > 0) {
+      if (isOption(args[0])) {
+        throw unknownOptionError('ls', args[0]);
+      }
+      throw new Error('ls accepts no arguments');
+    }
     cmdLs();
     return;
   }
 
   if (command === 'export') {
-    const runId = args[0];
-    if (!runId) throw new Error('export requires <runId>');
-
-    const formatFlag = args.find(arg => arg.startsWith('--format='));
-    const formatValue = formatFlag ? formatFlag.split('=')[1] : undefined;
-    const formatIndex = args.indexOf('--format');
-    const formatArg = formatIndex >= 0 ? args[formatIndex + 1] : undefined;
-    const requestedFormat = (formatValue ?? formatArg ?? 'json') as 'json' | 'markdown';
-
-    if (requestedFormat !== 'json' && requestedFormat !== 'markdown') {
-      throw new Error('export --format must be one of: json, markdown');
-    }
-
-    cmdExport(runId, requestedFormat);
+    const { runId, format } = parseExportArgs(args);
+    cmdExport(runId, format);
     return;
   }
 
   if (command === 'diff') {
-    const positional = args.filter(a => !a.startsWith('--'));
-    const jsonOutput = args.includes('--json');
-    const [runId1, runId2] = positional;
-    if (!runId1 || !runId2) throw new Error('diff requires <runId1> <runId2>');
+    const { runId1, runId2, jsonOutput } = parseDiffArgs(args);
     cmdDiff(runId1, runId2, jsonOutput);
     return;
   }
 
   usage();
-  process.exit(2);
+  process.exitCode = 2;
+}
+
+async function main() {
+  await runCli(process.argv.slice(2));
 }
 
 if (process.env.CLANKA_CORE_CLI_TEST !== '1') {
