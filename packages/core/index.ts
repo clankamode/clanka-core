@@ -40,7 +40,8 @@ export type {
 } from './kernel.js';
 
 // EventLog file verifier (schema + fs replay). Not what `clanka-core verify` runs.
-// packages/core/bin/clanka is a separate, unbuilt helper that requires dist/verify.js.
+// packages/core/bin/clanka is an unbuilt helper: it exits 2 unless dist/verify.js
+// exists (this tree does not compile packages/core). Not the published CLI.
 export { verifyRun } from './verify.js';
 
 export { createLogger } from './structured-logger.js';

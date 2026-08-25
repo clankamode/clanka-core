@@ -45,11 +45,16 @@ export function workspaceHashFromState(fsState: FSState): string {
  * Not wired into the published `clanka-core` CLI. `clanka-core verify` uses
  * `kernel.verify()` under `src/runtime` (v / runId / timestamps / digest /
  * seq / causes). This module is library-only inside `packages/core/` (not a
- * workspace package).
+ * workspace package). Empty / whitespace-only files throw (`No events`); they
+ * are not `{ valid: true, eventCount: 0 }`.
  */
 export async function verifyRun(runPath: string, options: { strict?: boolean } = {}) {
   const content = fs.readFileSync(runPath, 'utf-8');
   const lines = content.trim().split('\n').filter(l => l.length > 0);
+
+  if (lines.length === 0) {
+    throw new Error(`No events in ${runPath}`);
+  }
 
   const history: Event[] = [];
   const eventIds = new Set<string>();

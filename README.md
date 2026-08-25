@@ -31,8 +31,8 @@ npx clanka-core <command>
 - `run <runId> [--force]` - create a run and emit `run.start` / `run.commit` (writes `runs/<runId>.jsonl`; refuses overwrite without `--force`)
 - `log <runId> <type> <payload-json>` - append one event
 - `replay <runId>` - replay a recorded run with event stream and relative timestamps (empty history → stderr error)
-- `verify <runId>` - verify digest, seq, causes, v, runId, and timestamps (`PASS` on stdout, `FAIL` details on stderr; does not re-run invariants)
-- `ls` - list stored runs with event count, last timestamp, and verify status (no runs → stderr error)
+- `verify <runId>` - verify digest, seq, causes, v, runId, and timestamps (`PASS` on stdout, `FAIL` details on stderr; does not re-run invariants; empty history → `FAIL`, not `PASS`)
+- `ls` - list stored runs with event count, last timestamp, and verify status (no runs → stderr error; empty-history run → `FAIL`, not `PASS`)
 - `export <runId> [--format json|markdown]` - print the run event history as pretty-printed JSON (default) or markdown
 - `diff <runId1> <runId2> [--json]` - diff two runs (markdown or JSON output)
 - `help` / `--help` / `-h` - print usage

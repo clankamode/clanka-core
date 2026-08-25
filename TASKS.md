@@ -21,7 +21,7 @@ Historical March 2026 items below are marked against **current** code. The vites
 ## 🧠 Notes
 - CLI: `node dist/cli.js <command>` — commands: `run`, `log`, `replay`, `verify`, `ls`, `export`, `diff`, `help` (`--help` / `-h`)
 - `run <runId>` refuses to overwrite an existing `runs/<runId>.jsonl` unless `--force` is passed
-- Empty `ls` and empty-history `replay` print errors on stderr (non-zero silence is not success)
+- Empty `ls`, empty-history `replay`, and empty-history `verify`/`ls` rows fail on stderr (`PASS` is never used for 0 events)
 - `export` defaults to pretty-printed JSON event arrays (not raw JSONL reprint)
 - CLI / `ClankaKernel` emit `run.start` (not EventLog’s `run.started`); see `docs/event-schema.md`
 - `src/runtime/` — core event runtime, `src/diff.ts` — diff utilities
