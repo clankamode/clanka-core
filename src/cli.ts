@@ -43,6 +43,7 @@ export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('Notes:');
   writeLine('  verify/ls PASS|FAIL = digest, seq, causes, v, runId, timestamps');
   writeLine('  (not invariants, EventLog schema, fs snapshot, or workspaceHash)');
+  writeLine('  empty history → FAIL (not PASS)');
 }
 
 export function isHelpCommand(command: string | undefined): boolean {
@@ -128,15 +129,26 @@ export function cmdReplay(
   return true;
 }
 
-function cmdVerify(runId: string) {
+export function cmdVerify(
+  runId: string,
+  writeLine: (line: string) => void = console.log,
+  writeError: (line: string) => void = console.error,
+): boolean {
   try {
     const kernel = loadRun(runId);
     const result = kernel.verify();
-    console.log(`PASS ${runId} ${result.eventCount}`);
+    if (result.eventCount === 0) {
+      writeError(`FAIL ${runId} No events in run ${runId}`);
+      process.exitCode = 1;
+      return false;
+    }
+    writeLine(`PASS ${runId} ${result.eventCount}`);
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`FAIL ${runId} ${message}`);
+    writeError(`FAIL ${runId} ${message}`);
     process.exitCode = 1;
+    return false;
   }
 }
 
@@ -163,7 +175,10 @@ export function cmdLs(
       let status = 'PASS';
 
       try {
-        kernel.verify();
+        const result = kernel.verify();
+        if (result.eventCount === 0) {
+          status = `FAIL (No events in run ${runId})`;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         status = `FAIL (${message})`;

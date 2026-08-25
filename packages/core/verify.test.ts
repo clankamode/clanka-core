@@ -1,5 +1,6 @@
 import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -46,6 +47,29 @@ describe('verifyRun digest integrity', () => {
     const source = fs.readFileSync(path.join(__dirname, 'verify.ts'), 'utf8');
     assert.match(source, /Not wired into the published `clanka-core` CLI/);
     assert.match(source, /kernel\.verify\(\)/);
+  });
+
+  test('rejects an empty or whitespace-only run file', async () => {
+    const emptyPath = writeRun([]);
+    await assert.rejects(() => verifyRun(emptyPath), /No events/);
+
+    const blankDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-verify-blank-'));
+    const blankPath = path.join(blankDir, 'blank.jsonl');
+    fs.writeFileSync(blankPath, '\n\n  \n', 'utf-8');
+    await assert.rejects(() => verifyRun(blankPath), /No events/);
+  });
+
+  test('packages/core/bin/clanka is honest that it is unbuilt', () => {
+    const binPath = path.resolve(__dirname, 'bin/clanka');
+    const result = spawnSync(process.execPath, [binPath, 'verify', '--run', 'missing.jsonl'], {
+      encoding: 'utf-8',
+    });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /unbuilt EventLog helper/);
+    assert.match(result.stderr, /not the published `clanka-core` CLI/);
+    assert.match(result.stderr, /clanka-core verify <runId>/);
+    assert.doesNotMatch(result.stderr, /Cannot find module/);
+    assert.doesNotMatch(result.stdout, /Verified 0 events|✅/);
   });
 
   test('accepts the repo golden run file', async () => {

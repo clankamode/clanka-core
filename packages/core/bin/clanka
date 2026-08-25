@@ -1,12 +1,33 @@
 #!/usr/bin/env node
-const { verifyRun } = require('../dist/verify.js');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const verifyJs = path.join(__dirname, '../dist/verify.js');
+
+/**
+ * EventLog helper — not the published `clanka-core` bin.
+ * `packages/core` has no package.json / tsc build, so dist/verify.js is not
+ * produced by `npm run build`. Refuse rather than crashing on a missing module
+ * or advertising a working `clanka verify` command.
+ */
+if (!fs.existsSync(verifyJs)) {
+  console.error(
+    'packages/core/bin/clanka is an unbuilt EventLog helper (no packages/core/dist/verify.js).\n' +
+      'This is not the published `clanka-core` CLI.\n' +
+      'Use `clanka-core verify <runId>` for kernel integrity, or import verifyRun from packages/core/verify.ts.',
+  );
+  process.exit(2);
+}
+
+const { verifyRun } = require(verifyJs);
 
 async function main() {
   const args = process.argv.slice(2);
   const subcommand = args[0];
 
   if (subcommand !== 'verify') {
-    console.log('Usage: clanka verify --run <path> [--strict]');
+    console.error('Usage: clanka verify --run <path> [--strict]');
+    console.error('This helper is not `clanka-core`. Prefer `clanka-core verify <runId>`.');
     process.exit(2);
   }
 
@@ -21,9 +42,13 @@ async function main() {
 
   try {
     const result = await verifyRun(runPath, { strict });
-    console.log(`✅ Verified ${result.eventCount} events in ${runPath}`);
+    if (result.eventCount === 0) {
+      console.error(`FAIL ${runPath} No events`);
+      process.exit(1);
+    }
+    console.log(`Verified ${result.eventCount} events in ${runPath}`);
   } catch (e) {
-    console.error(`❌ Verification failed: ${e.message}`);
+    console.error(`Verification failed: ${e.message}`);
     process.exit(1);
   }
 }

@@ -68,6 +68,97 @@ test('cmdReplay empty run prints explicit message and exits non-zero', async () 
   }
 });
 
+test('cmdVerify non-empty valid run still prints PASS', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-verify-pass-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdRun, cmdVerify } = await import('./cli.js');
+
+    await cmdRun('demo', {}, () => {});
+    const lines: string[] = [];
+    const errors: string[] = [];
+    const ok = cmdVerify('demo', line => lines.push(line), line => errors.push(line));
+
+    assert.equal(ok, true);
+    assert.deepEqual(lines, ['PASS demo 2']);
+    assert.deepEqual(errors, []);
+    assert.equal(process.exitCode, 0);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdVerify empty run prints FAIL and exits non-zero', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-verify-empty-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdVerify } = await import('./cli.js');
+
+    const lines: string[] = [];
+    const errors: string[] = [];
+    const ok = cmdVerify('empty', line => lines.push(line), line => errors.push(line));
+
+    assert.equal(ok, false);
+    assert.deepEqual(lines, []);
+    assert.deepEqual(errors, ['FAIL empty No events in run empty']);
+    assert.equal(process.exitCode, 1);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdLs empty-history run is FAIL not PASS', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-ls-empty-run-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { cmdLs } = await import('./cli.js');
+
+    const lines: string[] = [];
+    cmdLs(line => lines.push(line));
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0], 'empty\t0\t0\tFAIL (No events in run empty)');
+  } finally {
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('cmdLs empty runs dir prints explicit message and exits non-zero', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-ls-empty-'));
   const priorCwd = process.cwd();
@@ -325,7 +416,8 @@ test('usage states verify scope is digest/seq/causes/v/runId/timestamps', async 
     usage(line => lines.push(line));
     const text = lines.join('\n');
     assert.match(text, /digest, seq, causes, v, runId, timestamps/);
-    assert.match(text, /not EventLog schema, fs snapshot, or workspaceHash/);
+    assert.match(text, /not invariants, EventLog schema, fs snapshot, or workspaceHash/);
+    assert.match(text, /empty history → FAIL \(not PASS\)/);
   } finally {
     if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
     else process.env.CLANKA_CORE_CLI_TEST = prior;

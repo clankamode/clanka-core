@@ -309,10 +309,12 @@ test('usage states verify scope is digest/seq/causes/v/runId/timestamps', async 
   const text = lines.join('\n');
   assert.match(text, /digest, seq, causes, v, runId, timestamps/);
   assert.match(text, /not invariants/);
+  assert.match(text, /empty history → FAIL \(not PASS\)/);
   assert.doesNotMatch(text, /integrity\/invariants/);
 
   const readme = fs.readFileSync(path.resolve(__dirname, '../README.md'), 'utf8');
   assert.match(readme, /verify <runId>.*digest, seq, causes, v, runId, and timestamps/);
+  assert.match(readme, /empty history → `FAIL`, not `PASS`/);
   assert.doesNotMatch(readme, /integrity\/invariants/);
 
   if (priorEnv === undefined) {
@@ -346,6 +348,109 @@ test('cmdReplay empty run prints explicit message', async () => {
     assert.deepEqual(lines, []);
     assert.deepEqual(errors, ['No events in run empty']);
     assert.equal(process.exitCode, 1);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdVerify non-empty valid run still prints PASS', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-verify-pass-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdRun, cmdVerify } = await import('./cli');
+
+    await cmdRun('demo', {}, () => {});
+    const lines: string[] = [];
+    const errors: string[] = [];
+    const ok = cmdVerify('demo', line => lines.push(line), line => errors.push(line));
+
+    assert.equal(ok, true);
+    assert.deepEqual(lines, ['PASS demo 2']);
+    assert.deepEqual(errors, []);
+    assert.equal(process.exitCode, 0);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdVerify empty run prints FAIL and exits non-zero', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-verify-empty-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdVerify } = await import('./cli');
+
+    const lines: string[] = [];
+    const errors: string[] = [];
+    const ok = cmdVerify('empty', line => lines.push(line), line => errors.push(line));
+
+    assert.equal(ok, false);
+    assert.deepEqual(lines, []);
+    assert.deepEqual(errors, ['FAIL empty No events in run empty']);
+    assert.equal(process.exitCode, 1);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (priorEnv === undefined) {
+      delete process.env.CLANKA_CORE_CLI_TEST;
+    } else {
+      process.env.CLANKA_CORE_CLI_TEST = priorEnv;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cmdLs empty-history run is FAIL not PASS', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-ls-empty-run-'));
+  const priorCwd = process.cwd();
+  const priorEnv = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdLs } = await import('./cli');
+
+    const lines: string[] = [];
+    cmdLs(line => lines.push(line));
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0], 'empty\t0\t0\tFAIL (No events in run empty)');
   } finally {
     process.exitCode = priorExit;
     process.chdir(priorCwd);
