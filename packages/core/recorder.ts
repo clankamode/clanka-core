@@ -107,11 +107,20 @@ export class ClankaRecorder {
       proc.on('error', (err) => {
         reject(err);
       });
-      proc.on('close', (code) => {
+      proc.on('close', (code, signal) => {
+        // Null `code` means the process was killed (or otherwise did not exit
+        // normally). Do not coerce that to 0 — it is not a successful run.
+        const exitCode = code === null ? 1 : code;
+        let error: string | undefined;
+        if (signal) {
+          error = stderr.trim() ? stderr : `killed by ${signal}`;
+        } else if (exitCode !== 0) {
+          error = stderr || undefined;
+        }
         resolve({
-          code: code ?? 0,
+          code: exitCode,
           stdout,
-          error: code !== 0 ? stderr : undefined,
+          error,
         });
       });
     });

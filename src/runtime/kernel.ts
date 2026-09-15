@@ -120,7 +120,16 @@ export class ClankaKernel {
     return this.state.history.map(event => JSON.stringify(event)).join('\n');
   }
 
+  /**
+   * Integrity check: digest, schema version `v`, runId, timestamps, seq, causes.
+   * Empty history throws (`No events in run …`), not `{ valid: true, eventCount: 0 }`.
+   * Does not re-run invariants (those run during `log()`).
+   */
   public verify(): VerifyResult {
+    if (this.state.history.length === 0) {
+      throw new Error(`No events in run ${this.sessionId}`);
+    }
+
     const eventIds = new Set<string>();
     const idToSeq = new Map<string, number>();
     let previousTimestamp: number | undefined;

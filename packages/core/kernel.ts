@@ -143,8 +143,13 @@ export class EventLogKernel {
   /**
    * Same contract as runtime ClankaKernel.verify():
    * digest, schema version `v`, runId, finite/monotonic timestamps, seq, causes.
+   * Empty history throws (`No events in run …`), not `{ valid: true, eventCount: 0 }`.
    */
   public verify(): EventLogVerifyResult {
+    if (this.history.length === 0) {
+      throw new Error(`No events in run ${this.runId}`);
+    }
+
     const eventIds = new Set<string>();
     const idToSeq = new Map<string, number>();
     let previousTimestamp: number | undefined;

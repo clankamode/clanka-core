@@ -31,6 +31,11 @@ function makeEvent(
   return { ...eventWithoutId, id: digestFor(eventWithoutId) };
 }
 
+test('verify rejects empty history instead of reporting valid:true', () => {
+  const kernel = new ClankaKernel('run-empty');
+  assert.throws(() => kernel.verify(), /No events in run run-empty/);
+});
+
 test('verify accepts a well-formed single-event history', async () => {
   const kernel = new ClankaKernel('run-ok');
   await kernel.log('run.start', 'agent', {});
