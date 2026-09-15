@@ -141,6 +141,41 @@ describe('ClankaRecorder fs honesty', () => {
     assert.equal(diff!.payload.patch.text, undefined);
   });
 
+  test('does not record a signal-killed process as exit 0', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-recorder-signal-'));
+    const sink = new MemoryLogSink('recorder-signal');
+    const recorder = new ClankaRecorder(sink, root);
+
+    const result = await recorder.executeTool(process.execPath, [
+      '-e',
+      'process.kill(process.pid, "SIGTERM")',
+    ]);
+
+    assert.notEqual(result.code, 0, 'killed process must not be reported as exit 0');
+    assert.match(result.error || '', /killed by SIGTERM/);
+
+    const responded = sink.history.find(e => e.type === 'tool.responded');
+    assert.ok(responded);
+    assert.notEqual(responded!.payload.exitCode, 0);
+    assert.equal(responded!.payload.error?.code, 'EXEC_ERROR');
+    assert.match(String(responded!.payload.error?.message), /killed by SIGTERM/);
+  });
+
+  test('successful process still records exit 0', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-recorder-ok-'));
+    const sink = new MemoryLogSink('recorder-ok');
+    const recorder = new ClankaRecorder(sink, root);
+
+    const result = await recorder.executeTool(process.execPath, ['-e', 'process.stdout.write("ok")']);
+
+    assert.equal(result.code, 0);
+    assert.equal(result.error, undefined);
+    const responded = sink.history.find(e => e.type === 'tool.responded');
+    assert.ok(responded);
+    assert.equal(responded!.payload.exitCode, 0);
+    assert.equal(responded!.payload.error, undefined);
+  });
+
   test('spawns without shell (metacharacters are literal argv, not shell syntax)', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-recorder-noshell-'));
     const sink = new MemoryLogSink('recorder-noshell');

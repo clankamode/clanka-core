@@ -23,7 +23,7 @@ Package entry is the root export only (`main` / `exports["."]` → `dist/index.j
 ### Kernel (`ClankaKernel`, `toCanonical`)
 - Append-only event kernel (`type` is an open `string`; CLI default startup label is `run.start`).
 - Types: `CognitiveEvent`, `Invariant`, `RuntimeState`, `VerifyResult`.
-- `verify()` checks digest, `seq`, causes, `runId === sessionId`, `v === 1.1` (`EVENT_SCHEMA_VERSION`), and finite non-decreasing timestamps. It does **not** re-run registered invariants; those run during `log()`.
+- `verify()` checks digest, `seq`, causes, `runId === sessionId`, `v === 1.1` (`EVENT_SCHEMA_VERSION`), and finite non-decreasing timestamps. Empty history throws (`No events in run …`); it is not `{ valid: true, eventCount: 0 }`. It does **not** re-run registered invariants; those run during `log()`.
 - Failed invariants append `invariant.failed` without re-entering `log()` / `enforceInvariants`, with the cause pinned to the triggering event (`ctx.event`).
 
 ### Diff

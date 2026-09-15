@@ -111,6 +111,10 @@ test('dual ClankaKernel copies agree on verify for well-formed history', async (
   assertVerifyParity('run-dual-ok', src.getHistory() as DualEvent[]);
 });
 
+test('dual ClankaKernel copies reject empty history', () => {
+  assertVerifyParity('run-dual-empty', []);
+});
+
 test('dual ClankaKernel copies agree on verify rejections', () => {
   const session = 'run-dual-reject';
   const ok = makeEvent(session, { seq: 0, type: 'run.start' });

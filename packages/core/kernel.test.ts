@@ -70,6 +70,16 @@ describe('EventLogKernel digest integrity', () => {
 });
 
 describe('EventLogKernel.verify (runtime-aligned contract)', () => {
+  test('throws on empty history instead of { valid: true, eventCount: 0 }', () => {
+    const kernel = new EventLogKernel('run-empty');
+    assert.throws(() => kernel.verify(), /No events in run run-empty/);
+  });
+
+  test('throws on whitespace-only JSONL', () => {
+    const kernel = EventLogKernel.fromJSONL('run-blank', '\n\n  \n');
+    assert.throws(() => kernel.verify(), /No events in run run-blank/);
+  });
+
   test('passes for a valid causal log', async () => {
     const kernel = new EventLogKernel('run-verify-ok');
     const start = await kernel.log('run.started', { name: 'ok' }, { agentId: 'agent' });

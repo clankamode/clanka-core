@@ -36,11 +36,14 @@ test('verify: throws when payload is altered after logging', async () => {
   assert.throws(() => kernel.verify(), /invalid digest/);
 });
 
-test('verify: empty history is valid', () => {
+test('verify: empty history is not valid', () => {
   const kernel = new ClankaKernel('run-empty');
-  const result = kernel.verify();
-  assert.equal(result.valid, true);
-  assert.equal(result.eventCount, 0);
+  assert.throws(() => kernel.verify(), /No events in run run-empty/);
+});
+
+test('verify: whitespace-only JSONL is not valid', () => {
+  const kernel = ClankaKernel.fromJSONL('run-blank', '\n\n  \n');
+  assert.throws(() => kernel.verify(), /No events in run run-blank/);
 });
 
 test('event id is a 64-char hex string (sha256)', async () => {
