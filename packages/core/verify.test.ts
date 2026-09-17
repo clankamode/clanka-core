@@ -79,6 +79,16 @@ describe('verifyRun digest integrity', () => {
     assert.equal(result.eventCount, 5);
   });
 
+  test('dogfood-simple.jsonl is not kept as a sample trace', () => {
+    const leftover = path.resolve(__dirname, '../../runs/dogfood-simple.jsonl');
+    assert.equal(fs.existsSync(leftover), false);
+
+    const gitignore = fs.readFileSync(path.resolve(__dirname, '../../.gitignore'), 'utf8');
+    assert.match(gitignore, /^runs\/\*\.jsonl$/m);
+    assert.match(gitignore, /^!runs\/golden\.jsonl$/m);
+    assert.doesNotMatch(gitignore, /dogfood-simple/);
+  });
+
   test('accepts a valid run including golden-style deep digests', async () => {
     const e0 = makeEvent({ seq: 0, type: 'run.started', payload: {} });
     const e1 = makeEvent({

@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventLogKernel, toCanonical, type Event } from './kernel.js';
+import { invariant_planBeforeAction } from './invariant.js';
 import * as coreIndex from './index.js';
 
 function recalcId(eventWithoutId: Omit<Event, 'id'>): string {
@@ -204,5 +205,64 @@ describe('EventLogKernel schema-typed logging', () => {
     const { id, ...withoutId } = event;
     assert.equal(id, recalcId(withoutId));
     assert.equal(kernel.verify().valid, true);
+  });
+});
+
+describe('EventLogKernel invariants (replaces scratch test-kernel.ts)', () => {
+  test('packages/core/test-kernel.ts is gone', () => {
+    assert.equal(fs.existsSync(path.join(__dirname, 'test-kernel.ts')), false);
+    assert.equal(fs.existsSync(path.join(__dirname, 'test-kernel.js')), false);
+  });
+
+  test('decision then causally linked tool.requested does not emit invariant.failed', async () => {
+    const kernel = new EventLogKernel('run-plan-ok');
+    kernel.registerInvariant(invariant_planBeforeAction());
+
+    const decision = await kernel.log(
+      'decision.made',
+      { thought: 'I should list files' },
+      { agentId: 'test-agent' },
+    );
+    await kernel.log(
+      'tool.requested',
+      { command: 'ls' },
+      { agentId: 'test-agent', tool: 'exec' },
+      [decision.id],
+    );
+
+    const violations = kernel.getHistory().filter((event) => event.type === 'invariant.failed');
+    assert.equal(violations.length, 0);
+    assert.equal(kernel.verify().valid, true);
+    assert.equal(kernel.verify().eventCount, 2);
+  });
+
+  test('tool.requested without a decision cause emits one plan_before_action failure', async () => {
+    const kernel = new EventLogKernel('run-plan-bad');
+    kernel.registerInvariant(invariant_planBeforeAction());
+
+    const tool = await kernel.log(
+      'tool.requested',
+      { command: 'rm -rf /' },
+      { agentId: 'rogue-agent', tool: 'exec' },
+    );
+
+    const violations = kernel.getHistory().filter(
+      (event) => event.type === 'invariant.failed' && event.payload.invariant === 'plan_before_action',
+    );
+    assert.equal(violations.length, 1);
+    assert.deepEqual(violations[0].causes, [tool.id]);
+    assert.equal(violations[0].payload.triggerEventId, tool.id);
+    assert.match(String(violations[0].payload.message), /missing decision\.made/);
+    assert.equal(kernel.verify().valid, true);
+  });
+
+  test('constructor invariants config matches registerInvariant', async () => {
+    const kernel = new EventLogKernel('run-plan-ctor', {
+      invariants: [invariant_planBeforeAction()],
+    });
+    await kernel.log('tool.requested', { command: 'ls' }, { agentId: 'test' });
+    const violations = kernel.getHistory().filter((event) => event.type === 'invariant.failed');
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0].payload.invariant, 'plan_before_action');
   });
 });
