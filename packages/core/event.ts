@@ -6,7 +6,7 @@ import { z } from 'zod';
  * 
  * Key principles:
  * - Content-addressable (digest = SHA256 of canonical JSON)
- * - Causally linked (parentId chains events)
+ * - Causally linked (`causes` chains parent event IDs)
  * - Immutable append-only log
  */
 

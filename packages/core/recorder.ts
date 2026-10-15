@@ -50,6 +50,11 @@ export class ClankaRecorder {
   ): Promise<{ code: number; stdout: string; error?: string }> {
     const callId = Math.random().toString(36).slice(2);
     const txId = `tx_${callId}`;
+    const scanRoot = caps.outDir ? path.resolve(this.workspaceRoot, caps.outDir) : this.workspaceRoot;
+
+    if (caps.fsWrite && !fs.existsSync(scanRoot)) {
+      throw new Error(`fsWrite scan root does not exist: ${scanRoot}`);
+    }
 
     const req = await this.sink.log('tool.requested', 'cli', {
       callId,
@@ -60,7 +65,6 @@ export class ClankaRecorder {
     }, causes);
     this.lastEventId = req.id;
 
-    const scanRoot = caps.outDir ? path.resolve(this.workspaceRoot, caps.outDir) : this.workspaceRoot;
     const preState = this.scanWorkspace(scanRoot);
 
     const result = await this.spawnTool(toolName, args);

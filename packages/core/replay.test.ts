@@ -23,17 +23,13 @@ function makeEvent({
   };
 }
 
-test('replay with zero events returns empty result', async () => {
+test('replay with zero events throws instead of success:true', async () => {
   const harness = new ReplayHarness({
     events: [],
     invariants: [],
   });
 
-  const result = await harness.replay();
-
-  assert.deepEqual(result.events, []);
-  assert.equal(result.invariantResults.length, 0);
-  assert.equal(result.success, true);
+  await assert.rejects(() => harness.replay(), /No events to replay/);
 });
 
 test('replay with duplicate event IDs applies last-write-wins', async () => {

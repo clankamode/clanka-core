@@ -33,8 +33,8 @@ npx clanka-core <command>
 - `replay <runId>` - replay a recorded run with event stream and relative timestamps (empty history → stderr error)
 - `verify <runId>` - verify digest, seq, causes, v, runId, and timestamps (`PASS` on stdout, `FAIL` details on stderr; does not re-run invariants; empty history → `FAIL`, not `PASS`)
 - `ls` - list stored runs with event count, last timestamp, and verify status (no runs → stderr error; empty-history run → `FAIL`, not `PASS`)
-- `export <runId> [--format json|markdown]` - print the run event history as pretty-printed JSON (default) or markdown
-- `diff <runId1> <runId2> [--json]` - diff two runs (markdown or JSON output)
+- `export <runId> [--format json|markdown]` - print the run event history as pretty-printed JSON (default) or markdown (empty history → stderr error, not `[]`)
+- `diff <runId1> <runId2> [--json]` - diff two runs (markdown or JSON output; empty history on either side → error, not identical-empty)
 - `help` / `--help` / `-h` - print usage
 
 Runs are stored as JSONL in `runs/<runId>.jsonl`. The `export` command does **not** reprint that JSONL file; default `export` emits a JSON array of events. Unknown options and extra positionals are rejected. `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error.

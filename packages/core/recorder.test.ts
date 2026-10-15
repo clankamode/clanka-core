@@ -189,6 +189,25 @@ describe('ClankaRecorder fs honesty', () => {
     );
   });
 
+  test('fsWrite on a missing scan root fails instead of emitting an empty snapshot', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-recorder-missing-scan-'));
+    const sink = new MemoryLogSink('recorder-missing-scan');
+    const recorder = new ClankaRecorder(sink, root);
+    const missing = path.join(root, 'no-such-out');
+
+    await assert.rejects(
+      () => recorder.executeTool(process.execPath, ['-e', 'process.stdout.write("ok")'], {
+        fsWrite: true,
+        outDir: 'no-such-out',
+      }),
+      /fsWrite scan root does not exist/,
+    );
+
+    assert.equal(fs.existsSync(missing), false);
+    assert.equal(sink.history.length, 0);
+    assert.equal(sink.history.some(e => e.type === 'fs.snapshot'), false);
+  });
+
   test('does not import published runtime kernel (sink is injected)', () => {
     const source = fs.readFileSync(path.join(__dirname, 'recorder.ts'), 'utf8');
     assert.equal(/\bfrom\s+['"][^'"]*runtime\/kernel['"]/.test(source), false);

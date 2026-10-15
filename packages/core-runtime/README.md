@@ -37,6 +37,7 @@ Package entry is the root export only (`main` / `exports["."]` → `dist/index.j
 ### Config (`loadConfig`, `parseEnvFile`, `ConfigValidationError`)
 - Merge priority per schema key: `config` object → `env` → `.env` file(s) → schema defaults/optionals.
 - `envPrefix` / `envMap` control env var names; `envMap` wins when set (including empty-string mapped names).
+- Default `.env` is optional. Explicit `envFilePath` values must exist; missing files throw `ConfigValidationError` (they are not skipped).
 - Unknown keys in the `config` object are passed through to Zod, so `.strict()` rejects them and `.passthrough()` keeps them.
 
 ### Retry (`retry`)

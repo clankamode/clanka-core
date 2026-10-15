@@ -20,7 +20,7 @@ export function usage(writeLine: (line: string) => void = console.log) {
   writeLine('Notes:');
   writeLine('  verify/ls PASS|FAIL = digest, seq, causes, v, runId, timestamps');
   writeLine('  (not invariants, EventLog schema, fs snapshot, or workspaceHash checks)');
-  writeLine('  empty history → FAIL (not PASS)');
+  writeLine('  empty history → FAIL (not PASS); export/diff refuse 0-event runs');
 }
 
 export function isHelpCommand(command: string | undefined): boolean {
@@ -171,7 +171,15 @@ export function cmdLs(
 function cmdDiff(runId1: string, runId2: string, jsonOutput: boolean) {
   const kernel1 = loadRun(runId1);
   const kernel2 = loadRun(runId2);
-  const result = diffRuns(runId1, kernel1.getHistory(), runId2, kernel2.getHistory());
+  const history1 = kernel1.getHistory();
+  const history2 = kernel2.getHistory();
+  if (history1.length === 0) {
+    throw new Error(`No events in run ${runId1}`);
+  }
+  if (history2.length === 0) {
+    throw new Error(`No events in run ${runId2}`);
+  }
+  const result = diffRuns(runId1, history1, runId2, history2);
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
   } else {
@@ -201,16 +209,24 @@ export function cmdExport(
   write: (chunk: string) => void = chunk => {
     process.stdout.write(chunk);
   },
-) {
+  writeError: (line: string) => void = console.error,
+): boolean {
   const kernel = loadRun(runId);
   const events = eventsBySeq(kernel);
 
+  if (events.length === 0) {
+    writeError(`No events in run ${runId}`);
+    process.exitCode = 1;
+    return false;
+  }
+
   if (format === 'markdown') {
     write(formatExportMarkdown(runId, events));
-    return;
+    return true;
   }
 
   write(JSON.stringify(events, null, 2) + '\n');
+  return true;
 }
 
 function isOption(arg: string): boolean {
