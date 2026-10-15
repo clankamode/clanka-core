@@ -159,6 +159,41 @@ test('loadConfig keeps unknown config keys when the schema uses passthrough', ()
   });
 });
 
+test('loadConfig skips a missing default .env but not an explicit envFilePath', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-core-config-missing-env-'));
+  tempDirs.push(tempDir);
+
+  const fromDefault = loadConfig({
+    schema: z.object({
+      label: z.string().default('unset'),
+    }),
+    cwd: tempDir,
+    env: {},
+  });
+  assert.equal(fromDefault.label, 'unset');
+
+  const missingPath = path.join(tempDir, 'production.env');
+  assert.throws(
+    () => loadConfig({
+      schema: z.object({
+        label: z.string().default('unset'),
+      }),
+      cwd: tempDir,
+      envFilePath: 'production.env',
+      env: {},
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigValidationError);
+      assert.match(error.message, /Env file not found/);
+      assert.match(error.message, /production\.env/);
+      assert.match(error.message, /Explicit envFilePath must exist/);
+      assert.equal(error.issues[0]?.source, 'envFile');
+      assert.equal(error.issues[0]?.path, missingPath);
+      return true;
+    },
+  );
+});
+
 test('parseEnvFile supports quotes and inline comments', () => {
   const parsed = parseEnvFile([
     'APP_NAME="clanka core"',

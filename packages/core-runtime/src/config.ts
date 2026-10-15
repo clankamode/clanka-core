@@ -48,7 +48,10 @@ export function loadConfig<TSchema extends ConfigSchema>(
   options: LoadConfigOptions<TSchema>,
 ): z.output<TSchema> {
   const cwd = options.cwd ?? process.cwd();
-  const envFile = loadEnvFiles(resolveEnvFilePaths(cwd, options.envFilePath));
+  const envFile = loadEnvFiles(
+    resolveEnvFilePaths(cwd, options.envFilePath),
+    options.envFilePath !== undefined,
+  );
   const env = options.env ?? process.env;
   // Preserve caller-provided config keys (including unknowns) so schema modes like
   // .strict() / .passthrough() can see them instead of silently dropping them.
@@ -129,11 +132,21 @@ function resolveEnvFilePaths(cwd: string, envFilePath?: string | string[]): stri
   return paths.map(filePath => path.resolve(cwd, filePath));
 }
 
-function loadEnvFiles(filePaths: string[]): LoadedEnvSource {
+function loadEnvFiles(filePaths: string[], requireExists: boolean): LoadedEnvSource {
   const loaded: EnvRecord = {};
 
   for (const filePath of filePaths) {
     if (!fs.existsSync(filePath)) {
+      if (requireExists) {
+        throw new ConfigValidationError([
+          {
+            key: 'envFilePath',
+            path: filePath,
+            message: `Env file not found: ${filePath}. Explicit envFilePath must exist (missing files are not skipped).`,
+            source: 'envFile',
+          },
+        ]);
+      }
       continue;
     }
 

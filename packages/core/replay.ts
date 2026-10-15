@@ -76,12 +76,17 @@ export class ReplayHarness {
 
   /**
    * Normalize the log and evaluate invariants.
+   * Empty input throws (`No events to replay`); it is not `{ success: true }`.
    */
   public async replay(): Promise<{
     success: boolean;
     invariantResults: { invariant: string; result: InvariantResult }[];
     events: Event[];
   }> {
+    if (this.events.length === 0) {
+      throw new Error('No events to replay');
+    }
+
     const replayedEvents = this.normalizeEvents(this.events);
     const invariantResults: { invariant: string; result: InvariantResult }[] = [];
 

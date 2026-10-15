@@ -341,6 +341,75 @@ test('runCli rejects unknown options that used to be silently ignored', async ()
   }
 });
 
+test('cmdExport empty run prints explicit message and exits non-zero', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-export-empty-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+  const priorExit = process.exitCode;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    process.exitCode = 0;
+    vi.resetModules();
+    const { cmdExport } = await import('./cli.js');
+
+    let output = '';
+    const errors: string[] = [];
+    const ok = cmdExport(
+      'empty',
+      'json',
+      chunk => {
+        output += chunk;
+      },
+      line => errors.push(line),
+    );
+
+    assert.equal(ok, false);
+    assert.equal(output, '');
+    assert.deepEqual(errors, ['No events in run empty']);
+    assert.equal(process.exitCode, 1);
+  } finally {
+    process.exitCode = priorExit;
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('runCli diff of an empty run fails instead of identical-empty', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-diff-empty-'));
+  const priorCwd = process.cwd();
+  const prior = process.env.CLANKA_CORE_CLI_TEST;
+
+  try {
+    process.chdir(tempRoot);
+    fs.mkdirSync(path.join(tempRoot, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'empty.jsonl'), '\n', 'utf-8');
+
+    const kernel = new ClankaKernel('demo');
+    await kernel.log('run.start', 'test', { ok: true });
+    fs.writeFileSync(path.join(tempRoot, 'runs', 'demo.jsonl'), kernel.serialize() + '\n', 'utf-8');
+
+    process.env.CLANKA_CORE_CLI_TEST = '1';
+    vi.resetModules();
+    const { runCli } = await import('./cli.js');
+
+    await assert.rejects(() => runCli(['diff', 'empty', 'demo']), /No events in run empty/);
+    await assert.rejects(() => runCli(['diff', 'demo', 'empty']), /No events in run empty/);
+    await assert.rejects(() => runCli(['diff', 'empty', 'empty']), /No events in run empty/);
+  } finally {
+    process.chdir(priorCwd);
+    if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
+    else process.env.CLANKA_CORE_CLI_TEST = prior;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('cmdExport json and markdown both order events by seq', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-cli-export-seq-'));
   const priorCwd = process.cwd();
@@ -417,7 +486,7 @@ test('usage states verify scope is digest/seq/causes/v/runId/timestamps', async 
     const text = lines.join('\n');
     assert.match(text, /digest, seq, causes, v, runId, timestamps/);
     assert.match(text, /not invariants, EventLog schema, fs snapshot, or workspaceHash/);
-    assert.match(text, /empty history → FAIL \(not PASS\)/);
+    assert.match(text, /empty history → FAIL \(not PASS\); export\/diff refuse 0-event runs/);
   } finally {
     if (prior === undefined) delete process.env.CLANKA_CORE_CLI_TEST;
     else process.env.CLANKA_CORE_CLI_TEST = prior;
