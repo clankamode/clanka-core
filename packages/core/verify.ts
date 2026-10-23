@@ -105,6 +105,9 @@ export async function verifyRun(runPath: string, options: { strict?: boolean } =
     if (event.type === 'fs.diff') {
       const { txId, path: filePath, beforeDigest, afterDigest, size } = event.payload;
       if (!txId) throw new Error(`Event ${event.seq}: fs.diff missing txId`);
+      if (typeof filePath !== 'string' || filePath.length === 0) {
+        throw new Error(`Event ${event.seq}: fs.diff missing path`);
+      }
 
       // Enforce no_file_collision within a txId
       if (!txTouchedPaths.has(txId)) txTouchedPaths.set(txId, new Set());

@@ -159,6 +159,14 @@ test('dual ClankaKernel copies agree on verify rejections', () => {
 
   const tampered = { ...ok, id: '0'.repeat(64) };
   assertVerifyParity(session, [tampered]);
+
+  assertVerifyParity(session, [
+    makeEvent(session, {
+      seq: 0,
+      type: 'run.start',
+      causes: null as unknown as string[],
+    }),
+  ]);
 });
 
 test('dual ClankaKernel copies agree on invariant.failed without re-entry', async () => {

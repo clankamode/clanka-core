@@ -27,6 +27,17 @@ test('diffLines surfaces added lines with + prefix', () => {
   assert.deepEqual(lines, ['+new']);
 });
 
+test('diffRuns throws instead of silently dropping duplicate seq events', () => {
+  const first = makeEvent({ seq: 0, type: 'run.start', payload: { n: 1 } });
+  const duplicate = makeEvent({ seq: 0, type: 'run.end', payload: { n: 2 }, id: 'id-dup' });
+  const other = makeEvent({ seq: 0, type: 'run.end', payload: { n: 2 }, runId: 'run-other' });
+
+  assert.throws(
+    () => diffRuns('run-a', [first, duplicate], 'run-b', [other]),
+    /Duplicate seq 0 in run run-a/,
+  );
+});
+
 test('diffRuns marks same-seq events as modified when payload differs', () => {
   const e1 = makeEvent({ seq: 0, type: 'run.started', payload: { n: 1 } });
   const e2 = makeEvent({ seq: 0, type: 'run.started', payload: { n: 2 } });

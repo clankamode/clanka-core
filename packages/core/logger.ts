@@ -16,6 +16,9 @@ import { EventSchema, type Event } from './event';
  *   (that would break content-digest verification of the on-disk line).
  * - No secret redaction: context and payloads are written as provided (after
  *   JSON serialization). `Error` values are expanded to name/message/stack.
+ * - `getIndex` / `append` parse every JSONL record. A corrupt middle line is
+ *   an error, not a skipped-and-healthy index, and a failed parse does not
+ *   cache an empty index for later calls.
  */
 
 export interface LoggerConfig {
@@ -85,20 +88,32 @@ export class EventLogger {
     if (this.indexLoaded) {
       return;
     }
-    this.indexLoaded = true;
 
     if (!fs.existsSync(this.logPath)) {
+      this.indexLoaded = true;
       return;
     }
 
     const events = fs.readFileSync(this.logPath, 'utf-8').trim().split('\n').filter(l => l);
     if (events.length === 0) {
+      this.indexLoaded = true;
       return;
     }
 
-    this.indexedCount = events.length;
-    this.indexedStarted = JSON.parse(events[0]).timestamp;
-    this.indexedFinished = JSON.parse(events[events.length - 1]).timestamp;
+    const parsedEvents: { timestamp?: unknown }[] = [];
+    for (let index = 0; index < events.length; index += 1) {
+      try {
+        parsedEvents.push(JSON.parse(events[index]));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Invalid JSONL in ${this.logPath}: ${message}`);
+      }
+    }
+
+    this.indexedCount = parsedEvents.length;
+    this.indexedStarted = parsedEvents[0].timestamp as number | undefined;
+    this.indexedFinished = parsedEvents[parsedEvents.length - 1].timestamp as number | undefined;
+    this.indexLoaded = true;
   }
 
   private noteAppended(timestamp: number): void {

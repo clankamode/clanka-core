@@ -147,6 +147,26 @@ test('verify: allows replayed events with omitted causes field', async () => {
   assert.equal(replayKernel.verify().eventCount, 1);
 });
 
+test('verify: rejects null/non-array causes instead of treating them as []', async () => {
+  const kernel = new ClankaKernel('run-null-causes');
+  await kernel.log('run.start', 'agent', { stage: 'start' });
+
+  const [event] = kernel.getHistory();
+  const withNullCauses = {
+    ...event,
+    causes: null,
+  };
+  const replayEvent = {
+    ...withNullCauses,
+    id: recalcKernelEventId(withNullCauses as Record<string, unknown>),
+  } as unknown as CognitiveEvent;
+
+  const replayKernel = new ClankaKernel('run-null-causes');
+  replayKernel.loadHistory([replayEvent]);
+
+  assert.throws(() => replayKernel.verify(), /invalid causes/);
+});
+
 test('registerInvariant: appends invariant.failed after a violating event with causal link', async () => {
   const kernel = new ClankaKernel('run-invariant-failure');
   kernel.registerInvariant({

@@ -37,7 +37,7 @@ npx clanka-core <command>
 - `diff <runId1> <runId2> [--json]` - diff two runs (markdown or JSON output; empty history on either side → error, not identical-empty)
 - `help` / `--help` / `-h` - print usage
 
-Runs are stored as JSONL in `runs/<runId>.jsonl`. The `export` command does **not** reprint that JSONL file; default `export` emits a JSON array of events. Unknown options and extra positionals are rejected. `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error.
+Runs are stored as JSONL in `runs/<runId>.jsonl`. The `export` command does **not** reprint that JSONL file; default `export` emits a JSON array of events. Unknown options and extra positionals are rejected. `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error, and repeating `--format` is an error (last-wins is not applied).
 
 ## Packages
 - `@clankamode/core-runtime` — kernel, diff, config, and retry primitives (`packages/core-runtime`; npm workspace)

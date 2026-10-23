@@ -169,13 +169,19 @@ export class ClankaKernel {
         throw new Error(`Sequence gap. Expected ${expectedSeq}, got ${event.seq}`);
       }
 
-      for (const causeId of event.causes || []) {
-        if (!eventIds.has(causeId)) {
-          throw new Error(`Event ${event.seq} has unknown cause: ${causeId}`);
+      const causes = event.causes;
+      if (causes !== undefined) {
+        if (!Array.isArray(causes) || causes.some(causeId => typeof causeId !== 'string')) {
+          throw new Error(`Event ${event.seq} has invalid causes`);
         }
-        const causeSeq = idToSeq.get(causeId) ?? -1;
-        if (causeSeq >= event.seq) {
-          throw new Error(`Event ${event.seq} has forward or self-referencing cause: ${causeId}`);
+        for (const causeId of causes) {
+          if (!eventIds.has(causeId)) {
+            throw new Error(`Event ${event.seq} has unknown cause: ${causeId}`);
+          }
+          const causeSeq = idToSeq.get(causeId) ?? -1;
+          if (causeSeq >= event.seq) {
+            throw new Error(`Event ${event.seq} has forward or self-referencing cause: ${causeId}`);
+          }
         }
       }
 

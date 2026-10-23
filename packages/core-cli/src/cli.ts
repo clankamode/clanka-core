@@ -265,6 +265,7 @@ export function parseExportArgs(args: string[]): {
 } {
   const positionals: string[] = [];
   let format: 'json' | 'markdown' = 'json';
+  let formatSpecified = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -282,9 +283,13 @@ export function parseExportArgs(args: string[]): {
         i += 1;
       }
 
+      if (formatSpecified) {
+        throw new Error('export --format specified more than once');
+      }
       if (value !== 'json' && value !== 'markdown') {
         throw new Error('export --format must be one of: json, markdown');
       }
+      formatSpecified = true;
       format = value;
       continue;
     }
