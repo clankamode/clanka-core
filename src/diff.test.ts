@@ -135,6 +135,19 @@ describe('large diff truncation', () => {
   });
 });
 
+describe('duplicate seq honesty', () => {
+  test('diffRuns throws instead of silently dropping duplicate seq events', () => {
+    const first = makeEvent({ seq: 0, type: 'run.start', payload: { n: 1 } });
+    const duplicate = makeEvent({ seq: 0, type: 'run.end', payload: { n: 2 }, id: 'id-dup' });
+    const other = makeEvent({ seq: 0, type: 'run.end', payload: { n: 2 }, runId: 'run-other' });
+
+    assert.throws(
+      () => diffRuns('run-a', [first, duplicate], 'run-b', [other]),
+      /Duplicate seq 0 in run run-a/,
+    );
+  });
+});
+
 describe('binary payload handling', () => {
   test('diffRuns detects blob digest changes as modified fields', () => {
     const e1 = makeEvent({

@@ -43,6 +43,17 @@ interface LineChange {
   line: string;
 }
 
+function mapEventsBySeq(runId: string, events: CognitiveEvent[]): Map<number, CognitiveEvent> {
+  const mapped = new Map<number, CognitiveEvent>();
+  for (const event of events) {
+    if (mapped.has(event.seq)) {
+      throw new Error(`Duplicate seq ${event.seq} in run ${runId}`);
+    }
+    mapped.set(event.seq, event);
+  }
+  return mapped;
+}
+
 function flattenPayload(obj: unknown, prefix = ''): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   if (obj === null || typeof obj !== 'object') {
@@ -107,8 +118,8 @@ export function diffRuns(
   runId2: string,
   events2: CognitiveEvent[],
 ): RunDiffResult {
-  const map1 = new Map(events1.map(e => [e.seq, e]));
-  const map2 = new Map(events2.map(e => [e.seq, e]));
+  const map1 = mapEventsBySeq(runId1, events1);
+  const map2 = mapEventsBySeq(runId2, events2);
 
   const onlyInRun1: CognitiveEvent[] = [];
   const onlyInRun2: CognitiveEvent[] = [];

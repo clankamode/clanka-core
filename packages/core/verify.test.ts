@@ -251,6 +251,28 @@ describe('verifyRun fs replay', () => {
     );
   });
 
+  test('rejects fs.diff events that omit path instead of applying an undefined key', async () => {
+    const e0 = makeEvent({ seq: 0, type: 'run.started' });
+    const afterDigest = createHash('sha256').update('hello').digest('hex');
+    const e1 = makeEvent({
+      seq: 1,
+      type: 'fs.diff',
+      causes: [e0.id],
+      payload: {
+        txId: 'tx1',
+        beforeDigest: 'null',
+        afterDigest,
+        size: 5,
+        patch: { kind: 'blob', digest: afterDigest },
+      },
+    });
+
+    await assert.rejects(
+      () => verifyRun(writeRun([e0, e1])),
+      /fs\.diff missing path/,
+    );
+  });
+
   test('rejects beforeDigest that does not match reconstructed state', async () => {
     const e0 = makeEvent({ seq: 0, type: 'run.started' });
     const e1 = makeEvent({

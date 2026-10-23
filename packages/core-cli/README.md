@@ -20,7 +20,7 @@ clanka-core help | --help | -h
 - Runs are stored as JSONL under `runs/<runId>.jsonl`.
 - `run` refuses to overwrite an existing run unless `--force` is passed.
 - `export` (default `--format json`) prints a pretty-printed JSON **array** of events, not the raw JSONL file contents. Both `json` and `markdown` emit events ordered by `seq`.
-- `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error.
+- `export --format` requires an explicit `json` or `markdown` value; bare `--format` is an error, and repeating `--format` is an error (last-wins is not applied).
 - Unknown options and unexpected extra arguments are rejected (not silently ignored).
 - `verify` / `ls` `PASS`|`FAIL` means ClankaKernel integrity only: event digests, contiguous `seq`, causes, schema version `v`, `runId`, and timestamps (finite, non-decreasing). It does **not** run EventLog schema validation, fs snapshot checks, or `workspaceHash` verification (those live in `packages/core`, not this CLI).
 - `ls` with no runs, `replay`/`export`/`diff` with an empty history, and `verify`/`ls` of a 0-event run print errors (`FAIL`, not `PASS`; export does not print `[]`).

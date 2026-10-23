@@ -140,6 +140,16 @@ describe('EventLogKernel.verify (runtime-aligned contract)', () => {
     assert.throws(() => kernel.verify(), /timestamp/i);
   });
 
+  test('throws when causes is null instead of treating it as []', async () => {
+    const kernel = new EventLogKernel('run-null-causes');
+    await kernel.log('run.started', {}, { agentId: 'agent' });
+    const [event] = kernel.getHistory();
+    const withNullCauses = { ...event, causes: null };
+    const { id: _omit, ...withoutId } = withNullCauses;
+    kernel.loadHistory([{ ...withNullCauses, id: recalcId(withoutId) } as unknown as Event]);
+    assert.throws(() => kernel.verify(), /invalid causes/);
+  });
+
   test('throws when timestamps decrease', async () => {
     const kernel = new EventLogKernel('run-ts-order');
     await kernel.log('run.started', {}, { agentId: 'agent' });

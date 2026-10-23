@@ -68,6 +68,17 @@ test('verify rejects non-finite timestamps', () => {
   assert.throws(() => kernel.verify(), /timestamp/i);
 });
 
+test('verify rejects null causes instead of coercing them to []', () => {
+  const kernel = new ClankaKernel('run-null-causes');
+  const bad = makeEvent('run-null-causes', {
+    seq: 0,
+    type: 'run.start',
+    causes: null as unknown as string[],
+  });
+  kernel.loadHistory([bad]);
+  assert.throws(() => kernel.verify(), /invalid causes/);
+});
+
 test('verify rejects decreasing timestamps', () => {
   const kernel = new ClankaKernel('run-ts-order');
   const first = makeEvent('run-ts-order', { seq: 0, type: 'run.start', timestamp: 200 });

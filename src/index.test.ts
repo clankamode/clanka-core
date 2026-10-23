@@ -787,6 +787,14 @@ test('parseExportArgs rejects bare --format and unknown options', async () => {
       () => parseExportArgs(['demo', '--format', 'yaml']),
       /export --format must be one of: json, markdown/,
     );
+    assert.throws(
+      () => parseExportArgs(['demo', '--format', 'json', '--format', 'markdown']),
+      /export --format specified more than once/,
+    );
+    assert.throws(
+      () => parseExportArgs(['demo', '--format=json', '--format=markdown']),
+      /export --format specified more than once/,
+    );
   } finally {
     if (priorEnv === undefined) {
       delete process.env.CLANKA_CORE_CLI_TEST;

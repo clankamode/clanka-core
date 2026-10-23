@@ -224,6 +224,39 @@ test('getIndex reports first/last timestamps after append', async () => {
   }
 });
 
+test('getIndex and append fail on corrupt JSONL instead of skipping middle lines', async () => {
+  const output = new CaptureStream();
+  const { config, cleanup } = makeLoggerConfig(output);
+
+  try {
+    const logPath = path.join(config.runsDir, 'run-corrupt-middle.jsonl');
+    fs.mkdirSync(config.runsDir, { recursive: true });
+    fs.writeFileSync(
+      logPath,
+      [
+        JSON.stringify(makeEvent({ id: 'e0', seq: 0, timestamp: 10, type: 'run.started' })),
+        'NOT-JSON',
+        JSON.stringify(makeEvent({ id: 'e2', seq: 2, timestamp: 30, type: 'run.finished' })),
+      ].join('\n') + '\n',
+    );
+
+    const logger = new EventLogger('run-corrupt-middle', config);
+    assert.throws(() => logger.getIndex(), /Invalid JSONL/);
+    assert.throws(() => logger.getIndex(), /Invalid JSONL/);
+
+    await assert.rejects(
+      () => logger.append(makeEvent({ id: 'e3', seq: 3, timestamp: 40, type: 'run.finished' })),
+      /Invalid JSONL/,
+    );
+
+    const raw = fs.readFileSync(logPath, 'utf-8');
+    assert.match(raw, /NOT-JSON/);
+    assert.equal(raw.includes('"id":"e3"'), false);
+  } finally {
+    cleanup();
+  }
+});
+
 test('getIndex loads existing JSONL once then tracks further appends', async () => {
   const output = new CaptureStream();
   const { config, cleanup } = makeLoggerConfig(output);
