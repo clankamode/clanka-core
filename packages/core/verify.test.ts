@@ -72,6 +72,11 @@ describe('verifyRun digest integrity', () => {
     assert.doesNotMatch(result.stdout, /Verified 0 events|✅/);
   });
 
+  test('packages/core/bin/clanka relies on verifyRun throwing for empty history', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, 'bin/clanka'), 'utf8');
+    assert.doesNotMatch(source, /result\.eventCount === 0/);
+  });
+
   test('accepts the repo golden run file', async () => {
     const goldenPath = path.resolve(__dirname, '../../runs/golden.jsonl');
     const result = await verifyRun(goldenPath, { strict: true });

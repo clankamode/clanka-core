@@ -137,11 +137,6 @@ export function cmdVerify(
   try {
     const kernel = loadRun(runId);
     const result = kernel.verify();
-    if (result.eventCount === 0) {
-      writeError(`FAIL ${runId} No events in run ${runId}`);
-      process.exitCode = 1;
-      return false;
-    }
     writeLine(`PASS ${runId} ${result.eventCount}`);
     return true;
   } catch (error) {
@@ -175,10 +170,7 @@ export function cmdLs(
       let status = 'PASS';
 
       try {
-        const result = kernel.verify();
-        if (result.eventCount === 0) {
-          status = `FAIL (No events in run ${runId})`;
-        }
+        kernel.verify();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         status = `FAIL (${message})`;

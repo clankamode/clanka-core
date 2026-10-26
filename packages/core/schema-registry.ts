@@ -6,12 +6,10 @@ import { StrictPayloadSchemas } from './types';
  * Event types the registry may accept: EventLog enum plus `error.raised`
  * from the strict DAR schema in types.ts (see CONTRACT.md).
  */
-export const RegistryEventTypeSchema = z.union([
+const RegistryEventTypeSchema = z.union([
   EventTypeSchema,
   z.literal('error.raised'),
 ]);
-
-export type RegistryEventType = z.infer<typeof RegistryEventTypeSchema>;
 
 const EventPayloadSchema = z.record(z.string(), z.unknown());
 

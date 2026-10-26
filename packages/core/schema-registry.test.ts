@@ -1,6 +1,7 @@
 import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
+import * as schemaRegistry from './schema-registry';
 import { SchemaRegistry, type EventEnvelope } from './schema-registry';
 
 function makeEvent(overrides: Partial<EventEnvelope> = {}): EventEnvelope {
@@ -18,6 +19,10 @@ function makeEvent(overrides: Partial<EventEnvelope> = {}): EventEnvelope {
 }
 
 describe('SchemaRegistry', () => {
+  test('RegistryEventTypeSchema is module-private', () => {
+    assert.equal('RegistryEventTypeSchema' in schemaRegistry, false);
+  });
+
   test('listTypes returns an empty list before registration', () => {
     const registry = new SchemaRegistry();
     assert.deepEqual(registry.listTypes(), []);

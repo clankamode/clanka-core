@@ -42,10 +42,6 @@ async function main() {
 
   try {
     const result = await verifyRun(runPath, { strict });
-    if (result.eventCount === 0) {
-      console.error(`FAIL ${runPath} No events`);
-      process.exit(1);
-    }
     console.log(`Verified ${result.eventCount} events in ${runPath}`);
   } catch (e) {
     console.error(`Verification failed: ${e.message}`);

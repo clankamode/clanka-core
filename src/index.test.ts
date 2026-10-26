@@ -475,6 +475,11 @@ test('cmdVerify empty run prints FAIL and exits non-zero', async () => {
   }
 });
 
+test('cmdVerify/cmdLs rely on verify() throwing for empty history', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, 'cli.ts'), 'utf8');
+  assert.doesNotMatch(source, /result\.eventCount === 0/);
+});
+
 test('cmdLs empty-history run is FAIL not PASS', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clanka-cli-ls-empty-run-'));
   const priorCwd = process.cwd();
